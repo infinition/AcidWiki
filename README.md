@@ -2,7 +2,8 @@
 
 A modern, lightweight, and highly customizable wiki template designed for developers and documentation enthusiasts. Built with a focus on speed, aesthetics, and ease of use.
 
-![AcidWiki Preview](https://placehold.co/1200x600/111214/22c55e?text=AcidWiki+Template+Preview)
+<img width="1302" height="739" alt="image" src="https://github.com/user-attachments/assets/3dc02e6e-d9bd-47d4-88c2-2e9841f60256" />
+
 
 ## ✨ Features
 
