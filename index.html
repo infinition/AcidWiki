@@ -331,7 +331,26 @@
         /* TOC & Scroll */
         .toc-link.active {
             color: var(--accent-green);
-            border-left-color: var(--accent-green);
+        }
+
+        #toc-svg {
+            position: absolute;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            overflow: visible;
+            z-index: 10;
+        }
+
+        #toc-path {
+            transition: d 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+            opacity: 0;
+        }
+
+        #toc-path.active {
+            opacity: 1;
         }
 
         #scroll-top-btn {
@@ -471,6 +490,47 @@
         #toast-container.active {
             transform: translateX(-50%) translateY(0);
             opacity: 1;
+        }
+
+        /* --- PAGE TRANSITIONS --- */
+        .content-transition-area {
+            view-transition-name: content-transition;
+        }
+
+        ::view-transition-old(content-transition) {
+            animation: blur-scale-fade-out 0.3s cubic-bezier(0.455, 0.03, 0.515, 0.955) forwards;
+        }
+
+        ::view-transition-new(content-transition) {
+            animation: blur-scale-fade-in 0.5s cubic-bezier(0.455, 0.03, 0.515, 0.955) forwards;
+        }
+
+        @keyframes blur-scale-fade-out {
+            from {
+                filter: blur(0);
+                transform: scale(1);
+                opacity: 1;
+            }
+
+            to {
+                filter: blur(4px);
+                transform: scale(1.05);
+                opacity: 0;
+            }
+        }
+
+        @keyframes blur-scale-fade-in {
+            from {
+                filter: blur(4px);
+                transform: scale(0.95);
+                opacity: 0;
+            }
+
+            to {
+                filter: blur(0);
+                transform: scale(1);
+                opacity: 1;
+            }
         }
     </style>
 
@@ -654,7 +714,7 @@
     <div class="flex-1 flex flex-col h-full overflow-hidden relative">
         <main class="flex-1 overflow-y-auto bg-hack-bg scroll-smooth relative w-full" id="scroll-container">
             <div class="max-w-6xl mx-auto px-5 py-8 md:py-12 md:px-10 flex gap-10">
-                <div class="flex-1 min-w-0">
+                <div class="flex-1 min-w-0 content-transition-area">
                     <div
                         class="flex flex-col md:flex-row md:items-center justify-between mb-6 gap-2 border-b border-hack-border/50 pb-4">
                         <div class="flex items-center gap-2 text-xs font-mono text-gray-500 overflow-x-auto whitespace-nowrap pb-2 md:pb-0"
@@ -687,7 +747,13 @@
                         <h4 id="label-on-this-page"
                             class="text-xs font-bold text-gray-500 uppercase tracking-widest mb-4 border-b border-hack-border pb-2">
                             On this page</h4>
-                        <ul id="toc-container" class="space-y-2 text-xs border-l border-hack-border pl-3"></ul>
+                        <div class="relative">
+                            <svg id="toc-svg">
+                                <path id="toc-path" fill="none" stroke="var(--accent-green)" stroke-width="2"
+                                    stroke-linecap="round" stroke-linejoin="round" />
+                            </svg>
+                            <ul id="toc-container" class="space-y-2 text-xs border-l border-hack-border pl-3"></ul>
+                        </div>
                     </div>
                 </aside>
             </div>
@@ -1077,6 +1143,14 @@
 
         // --- 5. CONTENT LOADER (PERSISTENT CACHE OPTIMIZED) ---
         async function loadContent(folder, title, filename, pushHistory = true) {
+            if (CONFIG.features.pageTransitions && document.startViewTransition) {
+                document.startViewTransition(() => performLoadContent(folder, title, filename, pushHistory));
+            } else {
+                performLoadContent(folder, title, filename, pushHistory);
+            }
+        }
+
+        async function performLoadContent(folder, title, filename, pushHistory = true) {
             const viewer = document.getElementById('markdown-viewer');
             const pageNav = document.getElementById('page-nav');
             const scrollContainer = document.getElementById('scroll-container');
@@ -1166,7 +1240,11 @@
                     window.history.pushState({ folder, title, filename }, "", newUrl);
                 }
 
-                STATE.expandedSections = new Set([folder]);
+                if (CONFIG.features.autoCollapseSidebar) {
+                    STATE.expandedSections = new Set([folder]);
+                } else {
+                    STATE.expandedSections.add(folder);
+                }
                 renderSidebar();
                 if (window.location.hash) {
                     const el = document.getElementById(window.location.hash.substring(1));
@@ -1250,7 +1328,7 @@
         }
 
         function enhanceMarkdownContent() {
-            document.querySelectorAll('#markdown-viewer h2, #markdown-viewer h3').forEach(h => {
+            document.querySelectorAll('#markdown-viewer h1, #markdown-viewer h2, #markdown-viewer h3').forEach(h => {
                 if (!h.id) h.id = h.textContent.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
 
                 const anchor = document.createElement('a');
@@ -1357,18 +1435,23 @@
         function generateTOC() {
             const desktopToc = document.getElementById('toc-container');
             const mobileToc = document.getElementById('mobile-toc-list');
-            const headings = document.querySelectorAll('#markdown-viewer h2, #markdown-viewer h3');
+            const headings = document.querySelectorAll('#markdown-viewer h1, #markdown-viewer h2, #markdown-viewer h3');
 
             const createTOCItem = (h, isMobile) => {
                 const li = document.createElement('li');
                 const link = document.createElement('a');
                 link.textContent = h.childNodes[0].textContent;
                 link.href = `#${h.id}`;
-                // Different styling for desktop vs mobile
+
+                // Indentation based on tag
+                let indentClass = '';
+                if (h.tagName === 'H2') indentClass = 'ml-3';
+                if (h.tagName === 'H3') indentClass = 'ml-6';
+
                 if (isMobile) {
-                    link.className = `block py-2 text-gray-400 hover:text-hack-green border-l-2 border-transparent pl-3 transition-colors ${h.tagName === 'H3' ? 'ml-4 text-xs' : 'font-medium'}`;
+                    link.className = `block py-2 text-gray-400 hover:text-hack-green border-l-2 border-transparent pl-3 transition-colors ${indentClass} ${h.tagName !== 'H1' ? 'text-xs' : 'font-medium'}`;
                 } else {
-                    link.className = `toc-link block py-1 pl-2 border-l-2 border-transparent hover:text-hack-green transition-colors truncate ${h.tagName === 'H3' ? 'ml-3 opacity-80' : ''}`;
+                    link.className = `toc-link block py-1 pl-2 border-l-2 border-transparent hover:text-hack-green transition-colors truncate ${indentClass} ${h.tagName !== 'H1' ? 'opacity-80' : ''}`;
                 }
 
                 link.onclick = (e) => {
@@ -1395,6 +1478,86 @@
                 desktopToc.appendChild(createTOCItem(h, false));
                 mobileToc.appendChild(createTOCItem(h, true));
             });
+
+            // Initial active state update
+            setTimeout(updateTOCActiveState, 100);
+        }
+
+        function updateTOCActiveState() {
+            const scrollContainer = document.getElementById('scroll-container');
+            const headings = Array.from(document.querySelectorAll('#markdown-viewer h1, #markdown-viewer h2, #markdown-viewer h3'));
+            const tocLinks = Array.from(document.querySelectorAll('.toc-link'));
+            const path = document.getElementById('toc-path');
+
+            if (!headings.length || !tocLinks.length || !path) return;
+
+            const containerRect = scrollContainer.getBoundingClientRect();
+            const buffer = 10; // Very small buffer for precision
+
+            // Find headings that are visible in the viewport
+            let activeHeadings = headings.filter(h => {
+                const rect = h.getBoundingClientRect();
+                const relativeTop = rect.top - containerRect.top;
+                const relativeBottom = rect.bottom - containerRect.top;
+                return (relativeTop < containerRect.height - buffer) && (relativeBottom > buffer);
+            });
+
+            // Fallback: if no heading is in view, use the last one that passed the top
+            if (activeHeadings.length === 0) {
+                const scrollPos = scrollContainer.scrollTop;
+                for (let i = headings.length - 1; i >= 0; i--) {
+                    if (headings[i].offsetTop <= scrollPos + 100) {
+                        activeHeadings.push(headings[i]);
+                        break;
+                    }
+                }
+            }
+            if (activeHeadings.length === 0) activeHeadings.push(headings[0]);
+
+            const activeIds = new Set(activeHeadings.map(h => h.id));
+            const activeLinks = [];
+
+            tocLinks.forEach(link => {
+                const id = link.getAttribute('href').substring(1);
+                if (activeIds.has(id)) {
+                    link.classList.add('active');
+                    activeLinks.push(link);
+                } else {
+                    link.classList.remove('active');
+                }
+            });
+
+            if (activeLinks.length > 0) {
+                let d = "";
+                let lastIndex = -2;
+
+                activeLinks.forEach((link, index) => {
+                    const id = link.getAttribute('href').substring(1);
+                    const heading = document.getElementById(id);
+                    const linkIndex = tocLinks.indexOf(link);
+
+                    // X position based on indentation (relative to TOC container left border)
+                    let x = -1; // Default for H1 (aligned with the left border)
+                    if (heading.tagName === 'H2') x = 11;   // H2 indented with ml-3 (12px)
+                    else if (heading.tagName === 'H3') x = 23; // H3 indented with ml-6 (24px)
+
+                    const yTop = link.offsetTop;
+                    const yBottom = yTop + link.offsetHeight;
+
+                    // If not contiguous with previous active link, start a new path segment
+                    if (linkIndex !== lastIndex + 1) {
+                        d += ` M ${x} ${yTop} L ${x} ${yBottom}`;
+                    } else {
+                        d += ` L ${x} ${yTop} L ${x} ${yBottom}`;
+                    }
+                    lastIndex = linkIndex;
+                });
+
+                path.setAttribute('d', d);
+                path.classList.add('active');
+            } else {
+                path.classList.remove('active');
+            }
         }
 
         // --- 6. SIDEBAR ---
@@ -1501,6 +1664,14 @@
 
         // --- 8. CHANGELOG ---
         async function toggleVersionsPage(btn, pushHistory = true) {
+            if (CONFIG.features.pageTransitions && document.startViewTransition) {
+                document.startViewTransition(() => performToggleVersionsPage(btn, pushHistory));
+            } else {
+                performToggleVersionsPage(btn, pushHistory);
+            }
+        }
+
+        async function performToggleVersionsPage(btn, pushHistory = true) {
             const viewer = document.getElementById('markdown-viewer');
             document.getElementById('breadcrumbs').innerHTML = `<span class="hover:text-hack-heading cursor-pointer" onclick="loadDefault()">${CONFIG.projectName}</span> <span>/</span> <span class="text-hack-green font-bold">${CONFIG.ui.changelogTitle}</span>`;
             document.getElementById('page-nav').innerHTML = '';
@@ -1632,6 +1803,8 @@
 
                     if (scrollTop > 300) scrollBtn.classList.remove('hidden');
                     else scrollBtn.classList.add('hidden');
+
+                    updateTOCActiveState();
                 });
             }
             if (scrollBtn) {

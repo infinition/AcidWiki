@@ -48,7 +48,9 @@ const CONFIG = {
         showChangelog: true,
         showSearch: true,
         showSocialBadges: true,
-        showThemeToggle: true
+        showThemeToggle: true,
+        pageTransitions: true,
+        autoCollapseSidebar: false
     },
 
     // Custom Navigation Links
