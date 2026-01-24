@@ -6,14 +6,13 @@
 const CONFIG = {
     // Project Information (Sera remplacé par le nom du Repo)
     projectName: "ACIDWIKI",
-    projectSubtitle: "ACIDWIKI WIKI",
-    description: "Official Documentation and Wiki for AcidWiki",
+    projectSubtitle: "WIKI NODE",
+    description: "Official Documentation and Wiki",
 
     // Versioning Settings
-    // Le workflow forcera "local" et injectera la version détectée (Tag)
     versioning: {
         type: "local",
-        manualVersion: "{"message":"Not Found","documentation_url":"https://docs.github.com/rest/releases/releases#get-the-latest-release","status":"404"}", // Sera remplacé par le Tag (ex: v1.0.0) ou vide
+        manualVersion: "", // Laisser vide. Le workflow mettra le tag ici.
         manualDate: "2026-01-24"
     },
 
@@ -56,15 +55,14 @@ const CONFIG = {
         debug: false
     },
 
-    // Custom Navigation Links
-    // Vides par défaut (Le script les laisse vides pour désactiver Main Site/Store)
+    // Custom Navigation Links (Vides par défaut)
     links: {
         top: [],
         bottom: []
     },
 
-    // Footer Customization (Sera remplacé dynamiquement)
-    footerText: "© 2026 ACIDWIKI WIKI - All rights reserved",
+    // Footer
+    footerText: "© 2026 ACIDWIKI - All rights reserved",
 
     // UI Strings
     ui: {
@@ -96,11 +94,10 @@ const CONFIG = {
     manifestPath: "wiki/manifest.json",
 
     // Social Links
-    // "null" par défaut pour désactiver si aucun acidwiki.json n'est trouvé
     social: {
         discord: null,
         reddit: null,
-        github: "https://github.com/infinition/AcidWiki",// Sera mis à jour vers le repo courant
+        github: "https://github.com/infinition/AcidWiki", // Virgule laissée ici exprès, elle sera respectée par le script
         buyMeACoffee: "https://buymeacoffee.com/infinition"
     },
 

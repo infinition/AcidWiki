@@ -29,17 +29,17 @@ jobs:
         env:
           SOURCE_REPO: ${{ inputs.source_repo }}
         run: |
-          # 1. Clone
+          # 1. Clone du moteur source
           git clone --depth 1 --branch main https://github.com/$SOURCE_REPO.git temp_source
           
-          # 2. Copy Core
+          # 2. Copie des fichiers système
           cp -rv temp_source/index.html .
           cp -rv temp_source/wiki/themes wiki/
           cp -rv temp_source/wiki/assets wiki/
           cp -rv temp_source/wiki/manifest.json wiki/
           cp -rv temp_source/wiki/sw.js wiki/
           
-          # 3. Reset Config Template
+          # 3. Reset du config.js template
           cp -rv temp_source/wiki/config.js wiki/
           
           rm -rf temp_source
@@ -52,14 +52,15 @@ jobs:
           CONFIG_FILE="wiki/config.js"
           JSON_FILE="acidwiki.json"
           
-          # --- 1. DETECTION ---
+          # --- 1. DÉTECTION ---
           REPO_NAME=$(echo "$REPO_FULL" | awk -F '/' '{print $2}')
+          # Récupération silencieuse du tag
           LATEST_TAG=$(gh api repos/$REPO_FULL/releases/latest --jq .tag_name 2>/dev/null || gh api repos/$REPO_FULL/tags --jq '.[0].name' 2>/dev/null || echo "")
           YEAR=$(date +'%Y')
           
-          echo "Repo detected: $REPO_NAME"
+          echo "Repo: $REPO_NAME | Tag: $LATEST_TAG"
 
-          # --- 2. LECTURE JSON ---
+          # --- 2. LECTURE CONFIG CLIENT ---
           DISCORD=""
           REDDIT=""
           COFFEE="https://buymeacoffee.com/infinition"
@@ -72,27 +73,27 @@ jobs:
             if [ -n "$JSON_COFFEE" ]; then COFFEE=$JSON_COFFEE; fi
           fi
 
-          # --- 3. INJECTION (CORRECTIF VIRGULES) ---
+          # --- 3. INJECTION DANS LE JS (CORRECTIF VIRGULES) ---
           
           # > Identité
-          # Pas de virgule ajoutée ici car on remplace entre les guillemets
           sed -i "s|projectName: \".*\"|projectName: \"${REPO_NAME^^}\"|g" $CONFIG_FILE
           sed -i "s|projectSubtitle: \".*\"|projectSubtitle: \"${REPO_NAME^^} WIKI\"|g" $CONFIG_FILE
           sed -i "s|description: \".*\"|description: \"Official Documentation and Wiki for ${REPO_NAME}\"|g" $CONFIG_FILE
           sed -i "s|repo: \".*\"|repo: \"$REPO_FULL\"|g" $CONFIG_FILE
           
-          # > Footer
+          # > Footer & Logo
           sed -i "s|footerText: \".*\"|footerText: \"© $YEAR ${REPO_NAME^^} WIKI - All rights reserved\"|g" $CONFIG_FILE
+          sed -i "s|logoPath: \".*\"|logoPath: \"wiki/assets/logo.png\"|g" $CONFIG_FILE
           
-          # > Github (CORRECTION ICI : On retire la virgule finale du remplacement)
+          # > Github (CORRECTION : PAS DE VIRGULE DANS LE REMPLACEMENT)
+          # On remplace uniquement ce qui est entre les guillemets. La virgule du fichier d'origine est conservée.
           sed -i "s|github: \".*\"|github: \"https://github.com/$REPO_FULL\"|g" $CONFIG_FILE
           sed -i "s|githubLabel: \".*\"|githubLabel: \"SOURCE CODE\"|g" $CONFIG_FILE
           
           # > Coffee
           sed -i "s|buyMeACoffee: \".*\"|buyMeACoffee: \"$COFFEE\"|g" $CONFIG_FILE
           
-          # > Discord & Reddit
-          # Ici on remplace TOUTE la ligne (null ou "url") donc on DOIT garder la virgule car le regex .* mange tout
+          # > Discord & Reddit (Remplacement de ligne entière -> Virgule requise ici)
           if [ -n "$DISCORD" ]; then
             sed -i "s|discord: .*|discord: \"$DISCORD\",|g" $CONFIG_FILE
           else
@@ -105,11 +106,11 @@ jobs:
             sed -i "s|reddit: .*|reddit: null,|g" $CONFIG_FILE
           fi
           
-          # > Menus
+          # > Désactivation Menus
           sed -i "s|top: \[.*|top: [],|g" $CONFIG_FILE
           sed -i "s|bottom: \[.*|bottom: []|g" $CONFIG_FILE
 
-          # > Versioning
+          # > Versioning Intelligent
           sed -i "s|type: \"github\"|type: \"local\"|g" $CONFIG_FILE
           
           if [ -n "$LATEST_TAG" ]; then
@@ -128,7 +129,7 @@ jobs:
       
       - name: Auto-Configure GitHub Pages
         env:
-          GH_TOKEN: ${{ secrets.GH_PAT_ADMIN || github.token }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           REPO: ${{ github.repository }}
         run: |
           gh api "repos/$REPO/pages" -X POST -F "source[branch]=main" -F "source[path]=/" --silent || true
