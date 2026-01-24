@@ -83,12 +83,12 @@ jobs:
              rm -f temp_source/.well-known/security.txt
           fi
 
-          # C. COPIE DES FICHIERS (CORRECTION CHEMINS)
+          # C. COPIE DES FICHIERS (CHEMINS CORRIGÉS)
           
-          # Moteur & Système (Tout est maintenant à la racine de la source)
+          # Moteur & Système (Tout est à la racine de la source)
           cp -fv temp_source/index.html .
-          cp -fv temp_source/manifest.json .   # <--- CORRIGÉ (était wiki/manifest.json)
-          cp -fv temp_source/sw.js .           # <--- CORRIGÉ (était wiki/sw.js)
+          cp -fv temp_source/manifest.json .
+          cp -fv temp_source/sw.js .
           cp -fv temp_source/robots.txt . || true
           cp -fv temp_source/.nojekyll . || true
           
@@ -97,14 +97,14 @@ jobs:
           
           # Copie récursive de .well-known s'il existe dans la source
           if [ -d "temp_source/.well-known" ]; then
-             # On copie le contenu sans écraser ce qui est protégé (car supprimé avant)
+             # On copie le contenu sans écraser ce qui est protégé
              cp -rn temp_source/.well-known/* .well-known/ || true
           fi
           
           # Config Template
           cp -rv temp_source/wiki/config.js wiki/
           
-          # Thèmes (Safe Copy)
+          # Thèmes (Safe Copy - vérifie s'il reste des fichiers)
           if [ -d "temp_source/wiki/themes" ] && [ "$(ls -A temp_source/wiki/themes)" ]; then
              echo "📦 Copying new themes..."
              cp -r temp_source/wiki/themes/* wiki/themes/
@@ -112,7 +112,7 @@ jobs:
              echo "✅ No new themes to copy."
           fi
 
-          # Assets (Safe Copy)
+          # Assets (Safe Copy - vérifie s'il reste des fichiers)
           if [ -d "temp_source/wiki/assets" ] && [ "$(ls -A temp_source/wiki/assets)" ]; then
              echo "📦 Copying new assets..."
              cp -r temp_source/wiki/assets/* wiki/assets/
@@ -212,14 +212,17 @@ jobs:
                $MANIFEST_FILE > manifest.tmp && mv manifest.tmp $MANIFEST_FILE
           fi
 
-          # --- 5. INJECTION SECURITY.TXT ---
+          # --- 5. INJECTION SECURITY.TXT (DYNAMIQUE) ---
+          # Calcule la date d'expiration (+1 an)
           EXP_DATE=$(date -d "+1 year" -u +"%Y-%m-%dT%H:%M:%S.000Z")
           
           update_security_file() {
             local file=$1
             if [ -f "$file" ]; then
               echo "Updating $file..."
+              # Remplace l'ancien repo (source) par le nouveau (ex: infinition/AcidWiki -> infinition/Bjorn)
               sed -i "s|infinition/AcidWiki|$REPO_FULL|g" "$file"
+              # Met à jour la date d'expiration
               sed -i "s|Expires: .*|Expires: $EXP_DATE|g" "$file"
             fi
           }
@@ -232,7 +235,7 @@ jobs:
           git config --local user.email "action@github.com"
           git config --local user.name "GitHub Action"
           
-          # On ajoute tout ce qui bouge
+          # Ajout de tous les fichiers (Système, Contenu, Sécurité)
           git add index.html wiki/ acidwiki.json manifest.json sw.js robots.txt .nojekyll security.txt .well-known/
           
           git diff --quiet && git diff --staged --quiet || (git commit -m "chore: update wiki config [skip ci]" && git push)
