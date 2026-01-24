@@ -1,0 +1,86 @@
+name: Central Wiki Sync Logic
+
+# C'est ici la clé : on le rend appelable par d'autres workflows
+on:
+  workflow_call:
+    inputs:
+      source_repo:
+        required: false
+        type: string
+        default: "infinition/AcidWiki"
+        description: "Le repo source du moteur Wiki"
+      source_branch:
+        required: false
+        type: string
+        default: "main"
+
+permissions:
+  contents: write
+
+jobs:
+  core-sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Caller Repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          # Important : cela checkoute le repo qui APPELLE le workflow
+
+      - name: Ensure Wiki Directory Exists
+        run: mkdir -p wiki/docs
+
+      - name: Sync Core Files from Source
+        env:
+          SOURCE_REPO: ${{ inputs.source_repo }}
+          SOURCE_BRANCH: ${{ inputs.source_branch }}
+          CURRENT_REPO: ${{ github.repository }}
+        run: |
+          echo "Checking for core files..."
+          
+          # Vérification si engine manquant
+          if [ ! -f "index.html" ] || [ ! -d "wiki/themes" ]; then
+            echo "Core files missing. Performing full engine sync from $SOURCE_REPO..."
+            
+            git clone --depth 1 --branch $SOURCE_BRANCH https://github.com/$SOURCE_REPO.git temp_source
+            
+            cp -rv temp_source/index.html .
+            cp -rv temp_source/wiki/config.js wiki/
+            cp -rv temp_source/wiki/themes wiki/
+            cp -rv temp_source/wiki/assets wiki/
+            cp -rv temp_source/wiki/manifest.json wiki/
+            cp -rv temp_source/wiki/sw.js wiki/
+            cp -rv temp_source/wiki/.nojekyll wiki/
+            cp -rv temp_source/wiki/robots.txt wiki/
+            
+            rm -rf temp_source
+          else
+            # Si repo différent, on update juste l'index
+            if [ "$CURRENT_REPO" != "$SOURCE_REPO" ]; then
+              echo "Syncing updates from $SOURCE_REPO ($SOURCE_BRANCH)..."
+              curl -sLo index.html "https://raw.githubusercontent.com/$SOURCE_REPO/$SOURCE_BRANCH/index.html"
+            else
+              echo "Current repo is source. Skipping core sync."
+            fi
+          fi
+
+      - name: Update Config with Repo Info
+        run: |
+          REPO_FULL_NAME="${{ github.repository }}"
+          REPO_NAME="${REPO_FULL_NAME#*/}"
+          GITHUB_URL="https://github.com/$REPO_FULL_NAME"
+          
+          if [ -f "wiki/config.js" ]; then
+            sed -i "s|repo: \"[^\"]*\"|repo: \"$REPO_FULL_NAME\"|g" wiki/config.js
+            sed -i "s|projectName: \"[^\"]*\"|projectName: \"${REPO_NAME^^}\"|g" wiki/config.js
+            sed -i "s|github: \"[^\"]*\"|github: \"$GITHUB_URL\"|g" wiki/config.js
+            echo "Updated wiki/config.js with repository info"
+          fi
+
+      - name: Commit and Push Changes
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          git add index.html wiki/
+          # On ne commit que s'il y a des changements
+          git diff --quiet && git diff --staged --quiet || (git commit -m "chore: auto-update wiki core files [skip ci]" && git push)
