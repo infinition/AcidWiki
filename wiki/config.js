@@ -4,7 +4,7 @@
  */
 const CONFIG = {
     // Project Information
-    projectName: "BJORN",
+    projectName: "ACIDWIKI",
     projectSubtitle: "BJORN WIKI",
     description: "Official Documentation and Wiki for BJORN Cyber Viking",
 
@@ -18,7 +18,7 @@ const CONFIG = {
 
     // GitHub Repository (for version checking when type is "github")
     // Format: "username/repo"
-    repo: "infinition/Bjorn",
+    repo: "infinition/AcidWiki",
     branch: "wiki",
 
     // Theme Settings
@@ -105,7 +105,7 @@ const CONFIG = {
     social: {
         discord: "https://discord.gg/B3ZH9taVfT",
         reddit: "https://www.reddit.com/r/Bjorn_CyberViking/",
-        github: "https://github.com/infinition/Bjorn",
+        github: "https://github.com/infinition/AcidWiki",
         buyMeACoffee: "https://buymeacoffee.com/infinition"
     },
 
