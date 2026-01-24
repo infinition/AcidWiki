@@ -1374,8 +1374,13 @@
                 }
 
                 if (!structure || Object.keys(structure).length === 0) {
-                    console.error('[AcidWiki] ❌ No wiki content found!');
-                    throw new Error("No wiki content found. Please add .md files to wiki/docs/");
+                    if (CONFIG.features.showRootReadme) {
+                        debugLog('[AcidWiki] ℹ️ No docs found, but root README is enabled. Proceeding...');
+                        structure = {}; // Empty but valid
+                    } else {
+                        console.error('[AcidWiki] ❌ No wiki content found!');
+                        throw new Error("No wiki content found. Please add .md files to wiki/docs/");
+                    }
                 }
 
                 debugLog('[AcidWiki] ✅ Wiki structure loaded successfully');
@@ -1410,61 +1415,62 @@
                 return null;
             }
 
-            debugLog(`[AcidWiki] 🌐 Fetching structure from GitHub API: ${STATE.repo}/${CONFIG.branch}`);
-            try {
-                // Use the GitHub Trees API to get the repository structure
-                // Recursive=1 allows us to see all files in one call
-                const res = await fetch(`https://api.github.com/repos/${STATE.repo}/git/trees/${CONFIG.branch}?recursive=1`);
-                if (!res.ok) {
-                    debugLog(`[AcidWiki] ❌ GitHub API request failed: ${res.status}`);
-                    return null;
-                }
-
-                debugLog('[AcidWiki] ✅ GitHub API response received');
-                const data = await res.json();
-                const structure = {};
-                let fileCount = 0;
-
-                data.tree.forEach(item => {
-                    // We only care about markdown files in the wiki/docs/ directory
-                    if (item.path.startsWith('wiki/docs/') && item.type === 'blob' && item.path.endsWith('.md')) {
-                        const relativePath = item.path.replace('wiki/docs/', '');
-                        const parts = relativePath.split('/');
-
-                        let currentLevel = structure;
-                        for (let i = 0; i < parts.length - 1; i++) {
-                            const folder = parts[i];
-                            if (!currentLevel[folder]) currentLevel[folder] = {};
-                            currentLevel = currentLevel[folder];
-                        }
-
-                        const filename = parts[parts.length - 1];
-                        const title = decodeURIComponent(filename.replace(/\.md$/, '').replace(/_/g, ' '));
-                        currentLevel[title] = filename;
-                        fileCount++;
+            const branchesToTry = [CONFIG.branch, 'main', 'master'];
+            for (const branch of branchesToTry) {
+                if (!branch) continue;
+                debugLog(`[AcidWiki] 🌐 Fetching structure from GitHub API: ${STATE.repo}/${branch}`);
+                try {
+                    const res = await fetch(`https://api.github.com/repos/${STATE.repo}/git/trees/${branch}?recursive=1`);
+                    if (!res.ok) {
+                        debugLog(`[AcidWiki] ⚠️ Branch "${branch}" failed (${res.status})`);
+                        continue;
                     }
-                });
 
-                // Sort folders and files recursively
-                function sortStructure(obj) {
-                    const sorted = {};
-                    Object.keys(obj).sort().forEach(key => {
-                        if (typeof obj[key] === 'object' && obj[key] !== null) {
-                            sorted[key] = sortStructure(obj[key]);
-                        } else {
-                            sorted[key] = obj[key];
+                    debugLog(`[AcidWiki] ✅ GitHub API response received for branch: ${branch}`);
+                    const data = await res.json();
+                    const structure = {};
+                    let fileCount = 0;
+
+                    data.tree.forEach(item => {
+                        if (item.path.startsWith('wiki/docs/') && item.type === 'blob' && item.path.endsWith('.md')) {
+                            const relativePath = item.path.replace('wiki/docs/', '');
+                            const parts = relativePath.split('/');
+
+                            let currentLevel = structure;
+                            for (let i = 0; i < parts.length - 1; i++) {
+                                const folder = parts[i];
+                                if (!currentLevel[folder]) currentLevel[folder] = {};
+                                currentLevel = currentLevel[folder];
+                            }
+
+                            const filename = parts[parts.length - 1];
+                            const title = decodeURIComponent(filename.replace(/\.md$/, '').replace(/_/g, ' '));
+                            currentLevel[title] = filename;
+                            fileCount++;
                         }
                     });
-                    return sorted;
-                }
 
-                const sortedStructure = sortStructure(structure);
-                debugLog(`[AcidWiki] ✅ GitHub discovery complete: Found ${fileCount} files`);
-                return Object.keys(sortedStructure).length > 0 ? sortedStructure : null;
-            } catch (e) {
-                console.error('[AcidWiki] ❌ GitHub API discovery failed:', e);
-                return null;
+                    // Sort folders and files recursively
+                    function sortStructure(obj) {
+                        const sorted = {};
+                        Object.keys(obj).sort().forEach(key => {
+                            if (typeof obj[key] === 'object' && obj[key] !== null) {
+                                sorted[key] = sortStructure(obj[key]);
+                            } else {
+                                sorted[key] = obj[key];
+                            }
+                        });
+                        return sorted;
+                    }
+
+                    const sortedStructure = sortStructure(structure);
+                    debugLog(`[AcidWiki] ✅ GitHub discovery complete: Found ${fileCount} files`);
+                    return Object.keys(sortedStructure).length > 0 ? sortedStructure : null;
+                } catch (e) {
+                    debugLog(`[AcidWiki] ❌ Error fetching branch "${branch}":`, e);
+                }
             }
+            return null;
         }
 
         async function scanLocalFilesystem() {
