@@ -31,14 +31,16 @@ jobs:
         run: |
           # 1. Clone & Copy
           git clone --depth 1 --branch main https://github.com/$SOURCE_REPO.git temp_source
+          
           cp -rv temp_source/index.html .
           cp -rv temp_source/wiki/themes wiki/
           cp -rv temp_source/wiki/assets wiki/
           cp -rv temp_source/wiki/manifest.json wiki/
           cp -rv temp_source/wiki/sw.js wiki/
           
-          # 2. Reset Config Template
+          # 2. Reset Config Template (On remet le fichier vierge)
           cp -rv temp_source/wiki/config.js wiki/
+          
           rm -rf temp_source
 
       - name: Dynamic Config Injection
@@ -51,13 +53,15 @@ jobs:
           
           # --- 1. DÉTECTION SÉCURISÉE ---
           REPO_NAME=$(echo "$REPO_FULL" | awk -F '/' '{print $2}')
+          YEAR=$(date +'%Y')
           
-          # On essaie de récupérer le dernier tag ou la release
-          # On redirige stderr vers null pour ne pas voir les erreurs console
+          # Tentative Release
           TAG_REL=$(gh api repos/$REPO_FULL/releases/latest --jq .tag_name 2>/dev/null || echo "")
+          
+          # Tentative Tags
           TAG_LIST=$(gh api repos/$REPO_FULL/tags --jq '.[0].name' 2>/dev/null || echo "")
           
-          # Logique de sélection : On vérifie que ce n'est PAS du JSON (pas d'accolade)
+          # Logique de validation : Si le résultat contient "{", c'est une erreur JSON, on l'ignore.
           LATEST_TAG=""
           
           if [[ -n "$TAG_REL" && "$TAG_REL" != *\{* ]]; then
@@ -66,8 +70,7 @@ jobs:
              LATEST_TAG="$TAG_LIST"
           fi
           
-          echo "Repo: $REPO_NAME | Tag validé: '$LATEST_TAG'"
-          YEAR=$(date +'%Y')
+          echo "Repo: $REPO_NAME | Version finale: '$LATEST_TAG'"
 
           # --- 2. LECTURE CONFIG CLIENT ---
           DISCORD=""
@@ -82,7 +85,7 @@ jobs:
             if [ -n "$JSON_COFFEE" ]; then COFFEE=$JSON_COFFEE; fi
           fi
 
-          # --- 3. INJECTION (SANS ERREUR DE SYNTAXE) ---
+          # --- 3. INJECTION ---
           
           # > Identité
           sed -i "s|projectName: \".*\"|projectName: \"${REPO_NAME^^}\"|g" $CONFIG_FILE
@@ -94,14 +97,14 @@ jobs:
           sed -i "s|footerText: \".*\"|footerText: \"© $YEAR ${REPO_NAME^^} WIKI - All rights reserved\"|g" $CONFIG_FILE
           sed -i "s|logoPath: \".*\"|logoPath: \"wiki/assets/logo.png\"|g" $CONFIG_FILE
           
-          # > Github (Pas de virgule dans le remplacement pour garder celle du fichier)
+          # > Github (Attention: ne pas ajouter de virgule ici, elle existe déjà dans le fichier)
           sed -i "s|github: \".*\"|github: \"https://github.com/$REPO_FULL\"|g" $CONFIG_FILE
           sed -i "s|githubLabel: \".*\"|githubLabel: \"SOURCE CODE\"|g" $CONFIG_FILE
           
           # > Coffee
           sed -i "s|buyMeACoffee: \".*\"|buyMeACoffee: \"$COFFEE\"|g" $CONFIG_FILE
           
-          # > Discord & Reddit (Remplacement ligne complète)
+          # > Discord & Reddit (Remplacement de ligne, donc virgule requise)
           if [ -n "$DISCORD" ]; then
             sed -i "s|discord: .*|discord: \"$DISCORD\",|g" $CONFIG_FILE
           else
@@ -121,7 +124,6 @@ jobs:
           # > Versioning Intelligent
           sed -i "s|type: \"github\"|type: \"local\"|g" $CONFIG_FILE
           
-          # Si LATEST_TAG est vide, on laisse vide. Sinon on l'injecte.
           if [ -n "$LATEST_TAG" ]; then
              sed -i "s|manualVersion: \".*\"|manualVersion: \"$LATEST_TAG\"|g" $CONFIG_FILE
           else
