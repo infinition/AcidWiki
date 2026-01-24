@@ -25,6 +25,24 @@ jobs:
       - name: Ensure Wiki Directory Exists
         run: mkdir -p wiki/docs
 
+      # --- NOUVELLE ÉTAPE : CRÉATION AUTO DE LA CONFIG ---
+      - name: Create Default Config if Missing
+        run: |
+          if [ ! -f "acidwiki.json" ]; then
+            echo "⚠️ acidwiki.json not found. Creating default configuration..."
+            cat <<EOF > acidwiki.json
+          {
+            "social": {
+              "discord": null,
+              "reddit": null
+            },
+            "buymeacoffee": "https://buymeacoffee.com/infinition"
+          }
+          EOF
+          else
+            echo "✅ acidwiki.json found. Keeping existing configuration."
+          fi
+
       - name: Sync Core Files from Source
         env:
           SOURCE_REPO: ${{ inputs.source_repo }}
@@ -135,7 +153,8 @@ jobs:
         run: |
           git config --local user.email "action@github.com"
           git config --local user.name "GitHub Action"
-          git add index.html wiki/
+          # IMPORTANT: On ajoute acidwiki.json au commit s'il vient d'être créé
+          git add index.html wiki/ acidwiki.json
           git diff --quiet && git diff --staged --quiet || (git commit -m "chore: update wiki config [skip ci]" && git push)
       
       - name: Auto-Configure GitHub Pages
