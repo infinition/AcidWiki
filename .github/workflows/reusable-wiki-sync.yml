@@ -29,17 +29,17 @@ jobs:
         env:
           SOURCE_REPO: ${{ inputs.source_repo }}
         run: |
-          # 1. Clone du moteur source
+          # 1. Clone
           git clone --depth 1 --branch main https://github.com/$SOURCE_REPO.git temp_source
           
-          # 2. Copie des fichiers système
+          # 2. Copy Core
           cp -rv temp_source/index.html .
           cp -rv temp_source/wiki/themes wiki/
           cp -rv temp_source/wiki/assets wiki/
           cp -rv temp_source/wiki/manifest.json wiki/
           cp -rv temp_source/wiki/sw.js wiki/
           
-          # 3. Reset du config.js template
+          # 3. Reset Config Template
           cp -rv temp_source/wiki/config.js wiki/
           
           rm -rf temp_source
@@ -54,11 +54,23 @@ jobs:
           
           # --- 1. DÉTECTION ---
           REPO_NAME=$(echo "$REPO_FULL" | awk -F '/' '{print $2}')
-          # Récupération silencieuse du tag
-          LATEST_TAG=$(gh api repos/$REPO_FULL/releases/latest --jq .tag_name 2>/dev/null || gh api repos/$REPO_FULL/tags --jq '.[0].name' 2>/dev/null || echo "")
           YEAR=$(date +'%Y')
+
+          # RÉCUPÉRATION SÉCURISÉE DE LA VERSION
+          # On essaie d'abord la release, puis les tags. On redirige les erreurs vers le néant.
+          # Si ça échoue, la variable reste vide.
+          TAG_REL=$(gh api repos/$REPO_FULL/releases/latest --jq .tag_name 2>/dev/null || true)
+          TAG_LIST=$(gh api repos/$REPO_FULL/tags --jq '.[0].name' 2>/dev/null || true)
           
-          echo "Repo: $REPO_NAME | Tag: $LATEST_TAG"
+          if [ -n "$TAG_REL" ]; then
+            LATEST_TAG="$TAG_REL"
+          elif [ -n "$TAG_LIST" ]; then
+            LATEST_TAG="$TAG_LIST"
+          else
+            LATEST_TAG=""
+          fi
+          
+          echo "Repo: $REPO_NAME | Tag détecté: '$LATEST_TAG'"
 
           # --- 2. LECTURE CONFIG CLIENT ---
           DISCORD=""
@@ -73,7 +85,7 @@ jobs:
             if [ -n "$JSON_COFFEE" ]; then COFFEE=$JSON_COFFEE; fi
           fi
 
-          # --- 3. INJECTION DANS LE JS (CORRECTIF VIRGULES) ---
+          # --- 3. INJECTION DANS LE JS ---
           
           # > Identité
           sed -i "s|projectName: \".*\"|projectName: \"${REPO_NAME^^}\"|g" $CONFIG_FILE
@@ -85,15 +97,14 @@ jobs:
           sed -i "s|footerText: \".*\"|footerText: \"© $YEAR ${REPO_NAME^^} WIKI - All rights reserved\"|g" $CONFIG_FILE
           sed -i "s|logoPath: \".*\"|logoPath: \"wiki/assets/logo.png\"|g" $CONFIG_FILE
           
-          # > Github (CORRECTION : PAS DE VIRGULE DANS LE REMPLACEMENT)
-          # On remplace uniquement ce qui est entre les guillemets. La virgule du fichier d'origine est conservée.
+          # > Github (Sans virgule ajoutée pour éviter le double)
           sed -i "s|github: \".*\"|github: \"https://github.com/$REPO_FULL\"|g" $CONFIG_FILE
           sed -i "s|githubLabel: \".*\"|githubLabel: \"SOURCE CODE\"|g" $CONFIG_FILE
           
           # > Coffee
           sed -i "s|buyMeACoffee: \".*\"|buyMeACoffee: \"$COFFEE\"|g" $CONFIG_FILE
           
-          # > Discord & Reddit (Remplacement de ligne entière -> Virgule requise ici)
+          # > Discord & Reddit
           if [ -n "$DISCORD" ]; then
             sed -i "s|discord: .*|discord: \"$DISCORD\",|g" $CONFIG_FILE
           else
