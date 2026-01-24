@@ -23,9 +23,9 @@ jobs:
           fetch-depth: 0
 
       - name: Ensure Wiki Directory Exists
-        run: mkdir -p wiki/docs
+        run: mkdir -p wiki/docs wiki/themes wiki/assets
 
-      # 1. Onboarding Automatique : Création du fichier de config s'il manque
+      # 1. Onboarding Automatique
       - name: Create Default Config if Missing
         run: |
           if [ ! -f "acidwiki.json" ]; then
@@ -48,18 +48,51 @@ jobs:
         env:
           SOURCE_REPO: ${{ inputs.source_repo }}
         run: |
-          # 2. Clone & Copy Core
+          # A. CLONE DU MASTER
+          echo "⬇️ Cloning engine from $SOURCE_REPO..."
           git clone --depth 1 --branch main https://github.com/$SOURCE_REPO.git temp_source
           
+          # B. PROTECTION DES ASSETS LOCAUX (Logo & Thèmes)
+          # Si un fichier existe déjà localement, on le supprime de la source téléchargée
+          # pour qu'il ne vienne PAS écraser ta version perso lors de la copie.
+
+          # 1. Protection du Logo
+          if [ -f "wiki/assets/logo.png" ]; then
+            echo "🛡️ Custom logo detected. Protecting local version..."
+            rm -f temp_source/wiki/assets/logo.png
+          fi
+
+          # 2. Protection des Thèmes
+          # On boucle sur tous les thèmes CSS présents localement
+          # Si AcidWiki a un thème du même nom, on supprime celui d'AcidWiki de la liste de copie.
+          if [ -d "wiki/themes" ]; then
+            for local_theme in wiki/themes/*.css; do
+              if [ -f "$local_theme" ]; then
+                theme_name=$(basename "$local_theme")
+                if [ -f "temp_source/wiki/themes/$theme_name" ]; then
+                  echo "🛡️ Custom theme detected ($theme_name). Keeping local version."
+                  rm "temp_source/wiki/themes/$theme_name"
+                fi
+              fi
+            done
+          fi
+
+          # C. COPIE DES FICHIERS (Maintenant safe)
+          
+          # Moteur & Système
           cp -rv temp_source/index.html .
-          cp -rv temp_source/wiki/themes wiki/
-          cp -rv temp_source/wiki/assets wiki/
           cp -rv temp_source/wiki/manifest.json wiki/
           cp -rv temp_source/wiki/sw.js wiki/
           
-          # 3. Reset Config Template (On remet le fichier vierge)
+          # Config Template (Sera réécrit après, donc on peut écraser)
           cp -rv temp_source/wiki/config.js wiki/
           
+          # Thèmes & Assets (On copie le reste, c'est-à-dire les nouveaux fichiers ou ceux non-modifiés)
+          # Le flag -r fusionne les dossiers
+          cp -r temp_source/wiki/themes/* wiki/themes/
+          cp -r temp_source/wiki/assets/* wiki/assets/
+          
+          # Nettoyage
           rm -rf temp_source
 
       - name: Dynamic Config Injection
@@ -74,11 +107,9 @@ jobs:
           REPO_NAME=$(echo "$REPO_FULL" | awk -F '/' '{print $2}')
           YEAR=$(date +'%Y')
           
-          # Tentative Release/Tags (Silencieuse)
           TAG_REL=$(gh api repos/$REPO_FULL/releases/latest --jq .tag_name 2>/dev/null || echo "")
           TAG_LIST=$(gh api repos/$REPO_FULL/tags --jq '.[0].name' 2>/dev/null || echo "")
           
-          # Validation anti-JSON (si erreur 404 renvoyée dans la variable)
           LATEST_TAG=""
           if [[ -n "$TAG_REL" && "$TAG_REL" != *\{* ]]; then
              LATEST_TAG="$TAG_REL"
@@ -120,7 +151,7 @@ jobs:
           # > Debug
           sed -i "s|debug: false|debug: $DEBUG_MODE|g" $CONFIG_FILE
 
-          # > Github (Nom du repo en label)
+          # > Github
           sed -i "s|github: \".*\"|github: \"https://github.com/$REPO_FULL\"|g" $CONFIG_FILE
           sed -i "s|githubLabel: \".*\"|githubLabel: \"${REPO_NAME^^}\"|g" $CONFIG_FILE
           
@@ -158,7 +189,6 @@ jobs:
         run: |
           git config --local user.email "action@github.com"
           git config --local user.name "GitHub Action"
-          # On ajoute acidwiki.json au cas où il vient d'être créé
           git add index.html wiki/ acidwiki.json
           git diff --quiet && git diff --staged --quiet || (git commit -m "chore: update wiki config [skip ci]" && git push)
       
