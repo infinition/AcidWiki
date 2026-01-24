@@ -6,8 +6,8 @@
 const CONFIG = {
     // Project Information (Sera remplacé par le nom du Repo)
     projectName: "ACIDWIKI",
-    projectSubtitle: "WIKI NODE",
-    description: "Official Documentation and Wiki",
+    projectSubtitle: "ACIDWIKI WIKI",
+    description: "Official Documentation and Wiki for AcidWiki",
 
     // Versioning Settings
     versioning: {
@@ -62,7 +62,7 @@ const CONFIG = {
     },
 
     // Footer
-    footerText: "© 2026 ACIDWIKI - All rights reserved",
+    footerText: "© 2026 ACIDWIKI WIKI - All rights reserved",
 
     // UI Strings
     ui: {
