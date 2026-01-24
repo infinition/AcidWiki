@@ -6,8 +6,8 @@
 const CONFIG = {
     // Project Information (Sera remplacé par le nom du Repo)
     projectName: "ACIDWIKI",
-    projectSubtitle: "WIKI NODE",
-    description: "Official Documentation and Wiki",
+    projectSubtitle: "ACIDWIKI WIKI",
+    description: "Official Documentation and Wiki for AcidWiki",
 
     // Versioning Settings
     // Le workflow forcera "local" et injectera la version détectée (Tag)
@@ -64,7 +64,7 @@ const CONFIG = {
     },
 
     // Footer Customization (Sera remplacé dynamiquement)
-    footerText: "© 2026 ACIDWIKI - All rights reserved",
+    footerText: "© 2026 ACIDWIKI WIKI - All rights reserved",
 
     // UI Strings
     ui: {
@@ -100,7 +100,7 @@ const CONFIG = {
     social: {
         discord: null,
         reddit: null,
-        github: "https://github.com/infinition/AcidWiki", // Sera mis à jour vers le repo courant
+        github: "https://github.com/infinition/AcidWiki",, // Sera mis à jour vers le repo courant
         buyMeACoffee: "https://buymeacoffee.com/infinition"
     },
 
