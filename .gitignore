@@ -23,3 +23,11 @@ yarn-error.log*
 .env.*.local  
 dist/  
 build/ 
+  
+# Wiki Content (Keep empty for template)  
+wiki/docs/*  
+!wiki/docs/.gitkeep 
+
+# Wiki Content (Keep empty for template)
+wiki/docs/*
+!wiki/docs/.gitkeep

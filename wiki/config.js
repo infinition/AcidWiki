@@ -4,15 +4,15 @@
  */
 const CONFIG = {
     // Project Information
-    projectName: "ACIDWIKI",
-    projectSubtitle: "WIKI NODE",
-    description: "Official Documentation and Wiki Template",
+    projectName: "BJORN",
+    projectSubtitle: "BJORN WIKI",
+    description: "Official Documentation and Wiki for BJORN Cyber Viking",
 
     // Versioning Settings
     // type: "github" (automatic from API) or "local" (manual)
     versioning: {
         type: "github",
-        manualVersion: "v1.0.0",
+        manualVersion: "v1.0.11",
         manualDate: "2026-01-21"
     },
 
@@ -23,23 +23,23 @@ const CONFIG = {
 
     // Theme Settings
     themes: [
-        { id: "dark", name: "Dark Mode", file: "themes/dark.css", isDark: true },
-        { id: "dim", name: "Dim Mode", file: "themes/light.css", isDark: true },
-        { id: "electric-blue", name: "Electric Blue", file: "themes/electric-blue.css", isDark: true },
-        { id: "cyberpunk", name: "Cyberpunk", file: "themes/cyberpunk.css", isDark: true },
-        { id: "forest", name: "Forest", file: "themes/forest.css", isDark: true },
-        { id: "monochrome", name: "Monochrome", file: "themes/monochrome.css", isDark: true },
-        { id: "retro-hackers", name: "Retro Hackers", file: "themes/retro-hackers.css", isDark: true },
-        { id: "retro-hackers-w", name: "Retro Hackers White", file: "themes/retro-hackers-w.css", isDark: false },
-        { id: "retro-acid-burn", name: "Retro Acid Burn", file: "themes/retro-acid-burn.css", isDark: true },
-        { id: "paper", name: "Paper", file: "themes/paper.css", isDark: false },
-        { id: "solarized-light", name: "Solarized Light", file: "themes/solarized-light.css", isDark: false },
-        { id: "nord-light", name: "Nord Light", file: "themes/nord-light.css", isDark: false },
-        { id: "paper-sepia", name: "Sepia Paper", file: "themes/paper-sepia.css", isDark: false },
-        { id: "paper-cool", name: "Cool Paper", file: "themes/paper-cool.css", isDark: false },
-        { id: "retro-irc", name: "Retro IRC", file: "themes/retro-irc.css", isDark: false },
-        { id: "nature", name: "Nature", file: "themes/nature.css", isDark: false },
-        { id: "glassmorphism", name: "Glassmorphism", file: "themes/glassmorphism.css", isDark: true }
+        { id: "dark", name: "Dark Mode", file: "wiki/themes/dark.css", isDark: true },
+        { id: "dim", name: "Dim Mode", file: "wiki/themes/light.css", isDark: true },
+        { id: "electric-blue", name: "Electric Blue", file: "wiki/themes/electric-blue.css", isDark: true },
+        { id: "cyberpunk", name: "Cyberpunk", file: "wiki/themes/cyberpunk.css", isDark: true },
+        { id: "forest", name: "Forest", file: "wiki/themes/forest.css", isDark: true },
+        { id: "monochrome", name: "Monochrome", file: "wiki/themes/monochrome.css", isDark: true },
+        { id: "retro-hackers", name: "Retro Hackers", file: "wiki/themes/retro-hackers.css", isDark: true },
+        { id: "retro-hackers-w", name: "Retro Hackers White", file: "wiki/themes/retro-hackers-w.css", isDark: false },
+        { id: "retro-acid-burn", name: "Retro Acid Burn", file: "wiki/themes/retro-acid-burn.css", isDark: true },
+        { id: "paper", name: "Paper", file: "wiki/themes/paper.css", isDark: false },
+        { id: "solarized-light", name: "Solarized Light", file: "wiki/themes/solarized-light.css", isDark: false },
+        { id: "nord-light", name: "Nord Light", file: "wiki/themes/nord-light.css", isDark: false },
+        { id: "paper-sepia", name: "Sepia Paper", file: "wiki/themes/paper-sepia.css", isDark: false },
+        { id: "paper-cool", name: "Cool Paper", file: "wiki/themes/paper-cool.css", isDark: false },
+        { id: "retro-irc", name: "Retro IRC", file: "wiki/themes/retro-irc.css", isDark: false },
+        { id: "nature", name: "Nature", file: "wiki/themes/nature.css", isDark: false },
+        { id: "glassmorphism", name: "Glassmorphism", file: "wiki/themes/glassmorphism.css", isDark: true }
     ],
     defaultTheme: "dark",
 
@@ -50,7 +50,10 @@ const CONFIG = {
         showSocialBadges: true,
         showThemeToggle: true,
         pageTransitions: true,
-        autoCollapseSidebar: false
+        autoCollapseSidebar: false,
+        stickyBreadcrumbs: true,
+        showRootReadme: true,
+        debug: true
     },
 
     // Custom Navigation Links
@@ -66,13 +69,14 @@ const CONFIG = {
     },
 
     // Footer Customization
-    footerText: "© 2026 ACIDWIKI - All rights reserved",
+    footerText: "© 2026 BJORN WIKI - All rights reserved",
 
     // UI Strings (Custom labels for the interface)
     ui: {
         joinUsTitle: ":: JOIN US ::",
         onThisPageTitle: "On this page",
         changelogTitle: "Changelog",
+        rootReadmeTitle: "Project Home",
         searchPlaceholder: "Search (Ctrl+K)...",
         lastUpdatedText: "Updated",
         readingTimePrefix: "~",
@@ -88,8 +92,13 @@ const CONFIG = {
     },
 
     // Logo Settings
-    logoPath: "assets/bjorn.png",
+    logoPath: "wiki/assets/logo.png",
     logoPlaceholder: "https://placehold.co/40x40/111214/22c55e?text=A",
+
+    // PWA & SEO Settings
+    themeColor: "#0B0C0E",
+    accentColor: "#22c55e",
+    manifestPath: "wiki/manifest.json",
 
     // Social Links
     // Set to null or empty string to hide the link
@@ -103,7 +112,7 @@ const CONFIG = {
     // Badge Labels (Optional customization for shields.io)
     badges: {
         discordLabel: "COMMUNITY",
-        redditLabel: "r/ACIDWIKI",
-        githubLabel: "ACIDWIKI"
+        redditLabel: "r/BJORN",
+        githubLabel: "BJORN WIKI"
     }
 };
