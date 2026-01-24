@@ -83,25 +83,28 @@ jobs:
              rm -f temp_source/.well-known/security.txt
           fi
 
-          # C. COPIE DES FICHIERS (Avec vérification dossier vide)
+          # C. COPIE DES FICHIERS (CORRECTION CHEMINS)
           
-          # Moteur & Système (Racine)
+          # Moteur & Système (Tout est maintenant à la racine de la source)
           cp -fv temp_source/index.html .
-          cp -fv temp_source/wiki/manifest.json .
-          cp -fv temp_source/wiki/sw.js .
-          cp -fv temp_source/wiki/robots.txt . || true
-          cp -fv temp_source/wiki/.nojekyll . || true
+          cp -fv temp_source/manifest.json .   # <--- CORRIGÉ (était wiki/manifest.json)
+          cp -fv temp_source/sw.js .           # <--- CORRIGÉ (était wiki/sw.js)
+          cp -fv temp_source/robots.txt . || true
+          cp -fv temp_source/.nojekyll . || true
           
-          # Fichiers Security
+          # Fichiers Security (S'ils n'ont pas été supprimés par la protection)
           if [ -f "temp_source/security.txt" ]; then cp -fv temp_source/security.txt .; fi
-          if [ -d "temp_source/.well-known" ] && [ "$(ls -A temp_source/.well-known)" ]; then
-             cp -r temp_source/.well-known/* .well-known/
+          
+          # Copie récursive de .well-known s'il existe dans la source
+          if [ -d "temp_source/.well-known" ]; then
+             # On copie le contenu sans écraser ce qui est protégé (car supprimé avant)
+             cp -rn temp_source/.well-known/* .well-known/ || true
           fi
           
           # Config Template
           cp -rv temp_source/wiki/config.js wiki/
           
-          # Thèmes (CORRECTION: On vérifie s'il reste des fichiers avant de copier)
+          # Thèmes (Safe Copy)
           if [ -d "temp_source/wiki/themes" ] && [ "$(ls -A temp_source/wiki/themes)" ]; then
              echo "📦 Copying new themes..."
              cp -r temp_source/wiki/themes/* wiki/themes/
@@ -109,7 +112,7 @@ jobs:
              echo "✅ No new themes to copy."
           fi
 
-          # Assets (CORRECTION: On vérifie s'il reste des fichiers avant de copier)
+          # Assets (Safe Copy)
           if [ -d "temp_source/wiki/assets" ] && [ "$(ls -A temp_source/wiki/assets)" ]; then
              echo "📦 Copying new assets..."
              cp -r temp_source/wiki/assets/* wiki/assets/
@@ -209,7 +212,7 @@ jobs:
                $MANIFEST_FILE > manifest.tmp && mv manifest.tmp $MANIFEST_FILE
           fi
 
-          # --- 5. INJECTION SECURITY.TXT (DYNAMIQUE) ---
+          # --- 5. INJECTION SECURITY.TXT ---
           EXP_DATE=$(date -d "+1 year" -u +"%Y-%m-%dT%H:%M:%S.000Z")
           
           update_security_file() {
@@ -229,7 +232,7 @@ jobs:
           git config --local user.email "action@github.com"
           git config --local user.name "GitHub Action"
           
-          # Ajout de tous les fichiers potentiellement créés ou modifiés
+          # On ajoute tout ce qui bouge
           git add index.html wiki/ acidwiki.json manifest.json sw.js robots.txt .nojekyll security.txt .well-known/
           
           git diff --quiet && git diff --staged --quiet || (git commit -m "chore: update wiki config [skip ci]" && git push)
