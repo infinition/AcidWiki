@@ -100,7 +100,7 @@ const CONFIG = {
     social: {
         discord: null,
         reddit: null,
-        github: "https://github.com/infinition/AcidWiki",// Sera mis à jour vers le repo courant
+        github: "https://github.com/infinition/AcidWiki",,// Sera mis à jour vers le repo courant
         buyMeACoffee: "https://buymeacoffee.com/infinition"
     },
 
