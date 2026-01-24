@@ -13,7 +13,7 @@ const CONFIG = {
     // Le workflow forcera "local" et injectera la version détectée (Tag)
     versioning: {
         type: "local",
-        manualVersion: "", // Sera remplacé par le Tag (ex: v1.0.0) ou vide
+        manualVersion: "{"message":"Not Found","documentation_url":"https://docs.github.com/rest/releases/releases#get-the-latest-release","status":"404"}", // Sera remplacé par le Tag (ex: v1.0.0) ou vide
         manualDate: "2026-01-24"
     },
 
