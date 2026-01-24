@@ -3,7 +3,7 @@
 AcidWiki is a modern, high-performance, and **fully automated** wiki engine designed for GitHub repositories.
 It uses a **centralized architecture**: logic and updates are managed by the source repository (`AcidWiki`), while your project simply "calls" the engine.
 
-## ✨ Features
+## ✨  Features
 
 - **🧠 Centralized Intelligence**: The core logic lives in `AcidWiki`. Client repositories use a reusable workflow to stay in sync.
 - **⚙️ Configuration as Code**: Customize your wiki via a simple `acidwiki.json` file. No JavaScript knowledge required.
