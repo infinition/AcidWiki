@@ -1737,11 +1737,11 @@
         }
 
         // --- 5. CONTENT LOADER (PERSISTENT CACHE OPTIMIZED) ---
-        async function loadContent(folder, title, filename, pushHistory = true) {
+        async function loadContent(folder, title, filename, pushHistory = true, isRoot = false) {
             if (CONFIG.features.pageTransitions && document.startViewTransition) {
-                document.startViewTransition(() => performLoadContent(folder, title, filename, pushHistory));
+                document.startViewTransition(() => performLoadContent(folder, title, filename, pushHistory, isRoot));
             } else {
-                performLoadContent(folder, title, filename, pushHistory);
+                performLoadContent(folder, title, filename, pushHistory, isRoot);
             }
         }
 
