@@ -19,7 +19,7 @@ const CONFIG = {
     // GitHub Repository (for version checking when type is "github")
     // Format: "username/repo"
     repo: "infinition/AcidWiki",
-    branch: "wiki",
+    branch: "main",
 
     // Theme Settings
     themes: [
