@@ -105,6 +105,6 @@ const CONFIG = {
     badges: {
         discordLabel: "COMMUNITY",
         redditLabel: "REDDIT",
-        githubLabel: "SOURCE CODE"
+        githubLabel: "ACIDWIKI"
     }
 };
