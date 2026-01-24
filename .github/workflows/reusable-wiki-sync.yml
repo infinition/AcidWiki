@@ -74,7 +74,6 @@ jobs:
           fi
 
           # 3. Protection Security (Racine & .well-known)
-          # On ne remplace PAS si l'utilisateur a déjà ses propres fichiers
           if [ -f "security.txt" ]; then
              echo "🛡️ Custom security.txt detected (root). Keeping local version."
              rm -f temp_source/security.txt
@@ -84,7 +83,7 @@ jobs:
              rm -f temp_source/.well-known/security.txt
           fi
 
-          # C. COPIE DES FICHIERS
+          # C. COPIE DES FICHIERS (Avec vérification dossier vide)
           
           # Moteur & Système (Racine)
           cp -fv temp_source/index.html .
@@ -93,18 +92,30 @@ jobs:
           cp -fv temp_source/wiki/robots.txt . || true
           cp -fv temp_source/wiki/.nojekyll . || true
           
-          # Fichiers Security (S'ils n'ont pas été supprimés par la protection)
-          cp -fv temp_source/security.txt . || true
-          if [ -d "temp_source/.well-known" ]; then
-             cp -rv temp_source/.well-known/* .well-known/ || true
+          # Fichiers Security
+          if [ -f "temp_source/security.txt" ]; then cp -fv temp_source/security.txt .; fi
+          if [ -d "temp_source/.well-known" ] && [ "$(ls -A temp_source/.well-known)" ]; then
+             cp -r temp_source/.well-known/* .well-known/
           fi
           
           # Config Template
           cp -rv temp_source/wiki/config.js wiki/
           
-          # Thèmes & Assets
-          cp -r temp_source/wiki/themes/* wiki/themes/
-          cp -r temp_source/wiki/assets/* wiki/assets/
+          # Thèmes (CORRECTION: On vérifie s'il reste des fichiers avant de copier)
+          if [ -d "temp_source/wiki/themes" ] && [ "$(ls -A temp_source/wiki/themes)" ]; then
+             echo "📦 Copying new themes..."
+             cp -r temp_source/wiki/themes/* wiki/themes/
+          else
+             echo "✅ No new themes to copy."
+          fi
+
+          # Assets (CORRECTION: On vérifie s'il reste des fichiers avant de copier)
+          if [ -d "temp_source/wiki/assets" ] && [ "$(ls -A temp_source/wiki/assets)" ]; then
+             echo "📦 Copying new assets..."
+             cp -r temp_source/wiki/assets/* wiki/assets/
+          else
+             echo "✅ No new assets to copy."
+          fi
           
           # Nettoyage
           rm -rf temp_source
@@ -189,26 +200,23 @@ jobs:
 
           # --- 4. INJECTION MANIFEST PWA ---
           echo "Injecting Manifest Data..."
-          jq --arg name "${REPO_NAME^^} WIKI" \
-             --arg short "$REPO_NAME" \
-             --arg desc "Official Documentation and Wiki for $REPO_NAME" \
-             --arg icon "wiki/assets/logo.png" \
-             '.name = $name | .short_name = $short | .description = $desc | .icons[].src = $icon | .shortcuts[].icons[].src = $icon' \
-             $MANIFEST_FILE > manifest.tmp && mv manifest.tmp $MANIFEST_FILE
+          if [ -f "$MANIFEST_FILE" ]; then
+            jq --arg name "${REPO_NAME^^} WIKI" \
+               --arg short "$REPO_NAME" \
+               --arg desc "Official Documentation and Wiki for $REPO_NAME" \
+               --arg icon "wiki/assets/logo.png" \
+               '.name = $name | .short_name = $short | .description = $desc | .icons[].src = $icon | .shortcuts[].icons[].src = $icon' \
+               $MANIFEST_FILE > manifest.tmp && mv manifest.tmp $MANIFEST_FILE
+          fi
 
           # --- 5. INJECTION SECURITY.TXT (DYNAMIQUE) ---
-          # On remplace l'URL du template (ex: infinition/AcidWiki) par le REPO_FULL courant
-          # On met à jour la date d'expiration à +1 an
-          
           EXP_DATE=$(date -d "+1 year" -u +"%Y-%m-%dT%H:%M:%S.000Z")
           
           update_security_file() {
             local file=$1
             if [ -f "$file" ]; then
               echo "Updating $file..."
-              # Remplace l'ancien repo (source) par le nouveau
               sed -i "s|infinition/AcidWiki|$REPO_FULL|g" "$file"
-              # Met à jour la date d'expiration
               sed -i "s|Expires: .*|Expires: $EXP_DATE|g" "$file"
             fi
           }
@@ -220,7 +228,10 @@ jobs:
         run: |
           git config --local user.email "action@github.com"
           git config --local user.name "GitHub Action"
+          
+          # Ajout de tous les fichiers potentiellement créés ou modifiés
           git add index.html wiki/ acidwiki.json manifest.json sw.js robots.txt .nojekyll security.txt .well-known/
+          
           git diff --quiet && git diff --staged --quiet || (git commit -m "chore: update wiki config [skip ci]" && git push)
       
       - name: Auto-Configure GitHub Pages
