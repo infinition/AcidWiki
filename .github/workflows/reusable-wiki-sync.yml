@@ -1,6 +1,5 @@
 name: Central Wiki Sync Logic
 
-# C'est ici la clé : on le rend appelable par d'autres workflows
 on:
   workflow_call:
     inputs:
@@ -8,14 +7,11 @@ on:
         required: false
         type: string
         default: "infinition/AcidWiki"
-        description: "Le repo source du moteur Wiki"
-      source_branch:
-        required: false
-        type: string
-        default: "main"
 
 permissions:
   contents: write
+  pages: write
+  id-token: write
 
 jobs:
   core-sync:
@@ -25,7 +21,6 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          # Important : cela checkoute le repo qui APPELLE le workflow
 
       - name: Ensure Wiki Directory Exists
         run: mkdir -p wiki/docs
@@ -33,54 +28,121 @@ jobs:
       - name: Sync Core Files from Source
         env:
           SOURCE_REPO: ${{ inputs.source_repo }}
-          SOURCE_BRANCH: ${{ inputs.source_branch }}
-          CURRENT_REPO: ${{ github.repository }}
         run: |
-          echo "Checking for core files..."
+          # 1. Clone du moteur source
+          git clone --depth 1 --branch main https://github.com/$SOURCE_REPO.git temp_source
           
-          # Vérification si engine manquant
-          if [ ! -f "index.html" ] || [ ! -d "wiki/themes" ]; then
-            echo "Core files missing. Performing full engine sync from $SOURCE_REPO..."
-            
-            git clone --depth 1 --branch $SOURCE_BRANCH https://github.com/$SOURCE_REPO.git temp_source
-            
-            cp -rv temp_source/index.html .
-            cp -rv temp_source/wiki/config.js wiki/
-            cp -rv temp_source/wiki/themes wiki/
-            cp -rv temp_source/wiki/assets wiki/
-            cp -rv temp_source/wiki/manifest.json wiki/
-            cp -rv temp_source/wiki/sw.js wiki/
-            cp -rv temp_source/wiki/.nojekyll wiki/
-            cp -rv temp_source/wiki/robots.txt wiki/
-            
-            rm -rf temp_source
+          # 2. Copie des fichiers système (On écrase tout pour être à jour)
+          cp -rv temp_source/index.html .
+          cp -rv temp_source/wiki/themes wiki/
+          cp -rv temp_source/wiki/assets wiki/
+          cp -rv temp_source/wiki/manifest.json wiki/
+          cp -rv temp_source/wiki/sw.js wiki/
+          
+          # 3. On remet le config.js "template" vierge pour le modifier proprement
+          cp -rv temp_source/wiki/config.js wiki/
+          
+          rm -rf temp_source
+
+      - name: Dynamic Config Injection
+        env:
+          REPO_FULL: ${{ github.repository }}
+        run: |
+          CONFIG_FILE="wiki/config.js"
+          JSON_FILE="acidwiki.json"
+          
+          echo ">>> 1. DÉTECTION DU CONTEXTE"
+          # Extraction du nom du repo (ex: Bjorn)
+          REPO_NAME=$(echo "$REPO_FULL" | awk -F '/' '{print $2}')
+          YEAR=$(date +'%Y')
+          
+          # Récupération de la dernière version (Release ou Tag)
+          # Si rien trouvé, retourne une chaîne vide
+          LATEST_TAG=$(gh api repos/$REPO_FULL/releases/latest --jq .tag_name 2>/dev/null || gh api repos/$REPO_FULL/tags --jq '.[0].name' 2>/dev/null || echo "")
+          
+          echo "Repo: $REPO_NAME"
+          echo "Version trouvée: '$LATEST_TAG'"
+
+          echo ">>> 2. LECTURE DE ACIDWIKI.JSON"
+          # Valeurs par défaut
+          DISCORD=""
+          REDDIT=""
+          COFFEE="https://buymeacoffee.com/infinition"
+
+          if [ -f "$JSON_FILE" ]; then
+            echo "Fichier de config json trouvé."
+            # Extraction via JQ. Si la clé manque ou est null, on récupère vide.
+            DISCORD=$(jq -r '.social.discord // empty' $JSON_FILE)
+            REDDIT=$(jq -r '.social.reddit // empty' $JSON_FILE)
+            JSON_COFFEE=$(jq -r '.buymeacoffee // empty' $JSON_FILE)
+            if [ -n "$JSON_COFFEE" ]; then COFFEE=$JSON_COFFEE; fi
           else
-            # Si repo différent, on update juste l'index
-            if [ "$CURRENT_REPO" != "$SOURCE_REPO" ]; then
-              echo "Syncing updates from $SOURCE_REPO ($SOURCE_BRANCH)..."
-              curl -sLo index.html "https://raw.githubusercontent.com/$SOURCE_REPO/$SOURCE_BRANCH/index.html"
-            else
-              echo "Current repo is source. Skipping core sync."
-            fi
+            echo "Pas de acidwiki.json. Utilisation des défauts."
           fi
 
-      - name: Update Config with Repo Info
-        run: |
-          REPO_FULL_NAME="${{ github.repository }}"
-          REPO_NAME="${REPO_FULL_NAME#*/}"
-          GITHUB_URL="https://github.com/$REPO_FULL_NAME"
+          echo ">>> 3. RÉÉCRITURE DE CONFIG.JS"
           
-          if [ -f "wiki/config.js" ]; then
-            sed -i "s|repo: \"[^\"]*\"|repo: \"$REPO_FULL_NAME\"|g" wiki/config.js
-            sed -i "s|projectName: \"[^\"]*\"|projectName: \"${REPO_NAME^^}\"|g" wiki/config.js
-            sed -i "s|github: \"[^\"]*\"|github: \"$GITHUB_URL\"|g" wiki/config.js
-            echo "Updated wiki/config.js with repository info"
+          # --- A. IDENTITÉ PROJET ---
+          # Remplace le nom et les sous-titres par le nom du Repo en Majuscules
+          sed -i "s|projectName: \".*\"|projectName: \"${REPO_NAME^^}\"|g" $CONFIG_FILE
+          sed -i "s|projectSubtitle: \".*\"|projectSubtitle: \"${REPO_NAME^^} WIKI\"|g" $CONFIG_FILE
+          sed -i "s|description: \".*\"|description: \"Official Documentation and Wiki for ${REPO_NAME}\"|g" $CONFIG_FILE
+          sed -i "s|repo: \".*\"|repo: \"$REPO_FULL\"|g" $CONFIG_FILE
+          
+          # --- B. VERSIONNING INTELLIGENT ---
+          # On force le mode "local" pour avoir le contrôle total de l'affichage
+          sed -i "s|type: \"github\"|type: \"local\"|g" $CONFIG_FILE
+          
+          if [ -n "$LATEST_TAG" ]; then
+             # Si version existe : on l'injecte
+             sed -i "s|manualVersion: \".*\"|manualVersion: \"$LATEST_TAG\"|g" $CONFIG_FILE
+          else
+             # Si PAS de version : on met vide (le CSS cachera l'élément)
+             sed -i "s|manualVersion: \".*\"|manualVersion: \"\"|g" $CONFIG_FILE
           fi
+          # Date du jour pour la config technique
+          sed -i "s|manualDate: \".*\"|manualDate: \"$(date +'%Y-%m-%d')\"|g" $CONFIG_FILE
+
+          # --- C. LIENS SOCIAUX ---
+          
+          # 1. GITHUB (Toujours actif, pointe vers le repo courant)
+          sed -i "s|github: \".*\"|github: \"https://github.com/$REPO_FULL\",|g" $CONFIG_FILE
+          sed -i "s|githubLabel: \".*\"|githubLabel: \"SOURCE CODE\"|g" $CONFIG_FILE
+          
+          # 2. BUY ME A COFFEE (Actif)
+          sed -i "s|buyMeACoffee: \".*\"|buyMeACoffee: \"$COFFEE\"|g" $CONFIG_FILE
+          
+          # 3. DISCORD (Dynamique selon JSON)
+          if [ -n "$DISCORD" ]; then
+            sed -i "s|discord: .*|discord: \"$DISCORD\",|g" $CONFIG_FILE
+          else
+            sed -i "s|discord: .*|discord: null,|g" $CONFIG_FILE
+          fi
+          
+          # 4. REDDIT (Dynamique selon JSON)
+          if [ -n "$REDDIT" ]; then
+            sed -i "s|reddit: .*|reddit: \"$REDDIT\",|g" $CONFIG_FILE
+          else
+            sed -i "s|reddit: .*|reddit: null,|g" $CONFIG_FILE
+          fi
+
+          # --- D. NETTOYAGE UI ---
+          
+          # Footer avec Année et Nom
+          sed -i "s|footerText: \".*\"|footerText: \"© $YEAR ${REPO_NAME^^} WIKI - All rights reserved\"|g" $CONFIG_FILE
+          
+          # Logo Fixe
+          sed -i "s|logoPath: \".*\"|logoPath: \"wiki/assets/logo.png\"|g" $CONFIG_FILE
+          
+          # Désactivation des liens Top/Bottom (Main Site, Portfolio...)
+          # On remplace le contenu des tableaux par vide []
+          sed -i "s|top: \[.*|top: [],|g" $CONFIG_FILE
+          sed -i "s|bottom: \[.*|bottom: []|g" $CONFIG_FILE
 
       - name: Commit and Push Changes
         run: |
           git config --local user.email "action@github.com"
           git config --local user.name "GitHub Action"
           git add index.html wiki/
-          # On ne commit que s'il y a des changements
-          git diff --quiet && git diff --staged --quiet || (git commit -m "chore: auto-update wiki core files [skip ci]" && git push)
+          # Commit seulement si changements détectés
+          git diff --quiet && git diff --staged --quiet || (git commit -m "chore: update wiki config from acidwiki.json [skip ci]" && git push)
