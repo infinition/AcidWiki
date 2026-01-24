@@ -1,4 +1,4 @@
-# 🚀 AcidWiki - Set & Forget GitHub Wiki Engine
+# 🚀  AcidWiki - Set & Forget GitHub Wiki Engine
 
 AcidWiki is a modern, high-performance, and **fully automated** wiki engine designed for GitHub repositories.
 It uses a **centralized architecture**: logic and updates are managed by the source repository (`AcidWiki`), while your project simply "calls" the engine.
