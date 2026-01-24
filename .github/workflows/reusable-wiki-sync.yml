@@ -25,13 +25,14 @@ jobs:
       - name: Ensure Wiki Directory Exists
         run: mkdir -p wiki/docs
 
-      # --- NOUVELLE ÉTAPE : CRÉATION AUTO DE LA CONFIG ---
+      # 1. Onboarding Automatique : Création du fichier de config s'il manque
       - name: Create Default Config if Missing
         run: |
           if [ ! -f "acidwiki.json" ]; then
             echo "⚠️ acidwiki.json not found. Creating default configuration..."
             cat <<EOF > acidwiki.json
           {
+            "debug": false,
             "social": {
               "discord": null,
               "reddit": null
@@ -47,7 +48,7 @@ jobs:
         env:
           SOURCE_REPO: ${{ inputs.source_repo }}
         run: |
-          # 1. Clone & Copy
+          # 2. Clone & Copy Core
           git clone --depth 1 --branch main https://github.com/$SOURCE_REPO.git temp_source
           
           cp -rv temp_source/index.html .
@@ -56,7 +57,7 @@ jobs:
           cp -rv temp_source/wiki/manifest.json wiki/
           cp -rv temp_source/wiki/sw.js wiki/
           
-          # 2. Reset Config Template (On remet le fichier vierge)
+          # 3. Reset Config Template (On remet le fichier vierge)
           cp -rv temp_source/wiki/config.js wiki/
           
           rm -rf temp_source
@@ -73,15 +74,12 @@ jobs:
           REPO_NAME=$(echo "$REPO_FULL" | awk -F '/' '{print $2}')
           YEAR=$(date +'%Y')
           
-          # Tentative Release
+          # Tentative Release/Tags (Silencieuse)
           TAG_REL=$(gh api repos/$REPO_FULL/releases/latest --jq .tag_name 2>/dev/null || echo "")
-          
-          # Tentative Tags
           TAG_LIST=$(gh api repos/$REPO_FULL/tags --jq '.[0].name' 2>/dev/null || echo "")
           
-          # Logique de validation : Si le résultat contient "{", c'est une erreur JSON, on l'ignore.
+          # Validation anti-JSON (si erreur 404 renvoyée dans la variable)
           LATEST_TAG=""
-          
           if [[ -n "$TAG_REL" && "$TAG_REL" != *\{* ]]; then
              LATEST_TAG="$TAG_REL"
           elif [[ -n "$TAG_LIST" && "$TAG_LIST" != *\{* ]]; then
@@ -94,6 +92,7 @@ jobs:
           DISCORD=""
           REDDIT=""
           COFFEE="https://buymeacoffee.com/infinition"
+          DEBUG_MODE="false"
 
           if [ -f "$JSON_FILE" ]; then
             echo "Loading acidwiki.json..."
@@ -101,6 +100,9 @@ jobs:
             REDDIT=$(jq -r '.social.reddit // empty' $JSON_FILE)
             JSON_COFFEE=$(jq -r '.buymeacoffee // empty' $JSON_FILE)
             if [ -n "$JSON_COFFEE" ]; then COFFEE=$JSON_COFFEE; fi
+            
+            DEBUG_VAL=$(jq -r '.debug' $JSON_FILE)
+            if [ "$DEBUG_VAL" == "true" ]; then DEBUG_MODE="true"; fi
           fi
 
           # --- 3. INJECTION ---
@@ -115,14 +117,17 @@ jobs:
           sed -i "s|footerText: \".*\"|footerText: \"© $YEAR ${REPO_NAME^^} WIKI - All rights reserved\"|g" $CONFIG_FILE
           sed -i "s|logoPath: \".*\"|logoPath: \"wiki/assets/logo.png\"|g" $CONFIG_FILE
           
-          # > Github (Attention: ne pas ajouter de virgule ici, elle existe déjà dans le fichier)
+          # > Debug
+          sed -i "s|debug: false|debug: $DEBUG_MODE|g" $CONFIG_FILE
+
+          # > Github (Nom du repo en label)
           sed -i "s|github: \".*\"|github: \"https://github.com/$REPO_FULL\"|g" $CONFIG_FILE
-          sed -i "s|githubLabel: \".*\"|githubLabel: \"SOURCE CODE\"|g" $CONFIG_FILE
+          sed -i "s|githubLabel: \".*\"|githubLabel: \"${REPO_NAME^^}\"|g" $CONFIG_FILE
           
           # > Coffee
           sed -i "s|buyMeACoffee: \".*\"|buyMeACoffee: \"$COFFEE\"|g" $CONFIG_FILE
           
-          # > Discord & Reddit (Remplacement de ligne, donc virgule requise)
+          # > Discord & Reddit
           if [ -n "$DISCORD" ]; then
             sed -i "s|discord: .*|discord: \"$DISCORD\",|g" $CONFIG_FILE
           else
@@ -153,7 +158,7 @@ jobs:
         run: |
           git config --local user.email "action@github.com"
           git config --local user.name "GitHub Action"
-          # IMPORTANT: On ajoute acidwiki.json au commit s'il vient d'être créé
+          # On ajoute acidwiki.json au cas où il vient d'être créé
           git add index.html wiki/ acidwiki.json
           git diff --quiet && git diff --staged --quiet || (git commit -m "chore: update wiki config [skip ci]" && git push)
       
