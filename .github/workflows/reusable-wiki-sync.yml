@@ -29,19 +29,16 @@ jobs:
         env:
           SOURCE_REPO: ${{ inputs.source_repo }}
         run: |
-          # 1. Clone
+          # 1. Clone & Copy
           git clone --depth 1 --branch main https://github.com/$SOURCE_REPO.git temp_source
-          
-          # 2. Copy Core
           cp -rv temp_source/index.html .
           cp -rv temp_source/wiki/themes wiki/
           cp -rv temp_source/wiki/assets wiki/
           cp -rv temp_source/wiki/manifest.json wiki/
           cp -rv temp_source/wiki/sw.js wiki/
           
-          # 3. Reset Config Template
+          # 2. Reset Config Template
           cp -rv temp_source/wiki/config.js wiki/
-          
           rm -rf temp_source
 
       - name: Dynamic Config Injection
@@ -52,25 +49,25 @@ jobs:
           CONFIG_FILE="wiki/config.js"
           JSON_FILE="acidwiki.json"
           
-          # --- 1. DÉTECTION ---
+          # --- 1. DÉTECTION SÉCURISÉE ---
           REPO_NAME=$(echo "$REPO_FULL" | awk -F '/' '{print $2}')
-          YEAR=$(date +'%Y')
-
-          # RÉCUPÉRATION SÉCURISÉE DE LA VERSION
-          # On essaie d'abord la release, puis les tags. On redirige les erreurs vers le néant.
-          # Si ça échoue, la variable reste vide.
-          TAG_REL=$(gh api repos/$REPO_FULL/releases/latest --jq .tag_name 2>/dev/null || true)
-          TAG_LIST=$(gh api repos/$REPO_FULL/tags --jq '.[0].name' 2>/dev/null || true)
           
-          if [ -n "$TAG_REL" ]; then
-            LATEST_TAG="$TAG_REL"
-          elif [ -n "$TAG_LIST" ]; then
-            LATEST_TAG="$TAG_LIST"
-          else
-            LATEST_TAG=""
+          # On essaie de récupérer le dernier tag ou la release
+          # On redirige stderr vers null pour ne pas voir les erreurs console
+          TAG_REL=$(gh api repos/$REPO_FULL/releases/latest --jq .tag_name 2>/dev/null || echo "")
+          TAG_LIST=$(gh api repos/$REPO_FULL/tags --jq '.[0].name' 2>/dev/null || echo "")
+          
+          # Logique de sélection : On vérifie que ce n'est PAS du JSON (pas d'accolade)
+          LATEST_TAG=""
+          
+          if [[ -n "$TAG_REL" && "$TAG_REL" != *\{* ]]; then
+             LATEST_TAG="$TAG_REL"
+          elif [[ -n "$TAG_LIST" && "$TAG_LIST" != *\{* ]]; then
+             LATEST_TAG="$TAG_LIST"
           fi
           
-          echo "Repo: $REPO_NAME | Tag détecté: '$LATEST_TAG'"
+          echo "Repo: $REPO_NAME | Tag validé: '$LATEST_TAG'"
+          YEAR=$(date +'%Y')
 
           # --- 2. LECTURE CONFIG CLIENT ---
           DISCORD=""
@@ -85,7 +82,7 @@ jobs:
             if [ -n "$JSON_COFFEE" ]; then COFFEE=$JSON_COFFEE; fi
           fi
 
-          # --- 3. INJECTION DANS LE JS ---
+          # --- 3. INJECTION (SANS ERREUR DE SYNTAXE) ---
           
           # > Identité
           sed -i "s|projectName: \".*\"|projectName: \"${REPO_NAME^^}\"|g" $CONFIG_FILE
@@ -97,14 +94,14 @@ jobs:
           sed -i "s|footerText: \".*\"|footerText: \"© $YEAR ${REPO_NAME^^} WIKI - All rights reserved\"|g" $CONFIG_FILE
           sed -i "s|logoPath: \".*\"|logoPath: \"wiki/assets/logo.png\"|g" $CONFIG_FILE
           
-          # > Github (Sans virgule ajoutée pour éviter le double)
+          # > Github (Pas de virgule dans le remplacement pour garder celle du fichier)
           sed -i "s|github: \".*\"|github: \"https://github.com/$REPO_FULL\"|g" $CONFIG_FILE
           sed -i "s|githubLabel: \".*\"|githubLabel: \"SOURCE CODE\"|g" $CONFIG_FILE
           
           # > Coffee
           sed -i "s|buyMeACoffee: \".*\"|buyMeACoffee: \"$COFFEE\"|g" $CONFIG_FILE
           
-          # > Discord & Reddit
+          # > Discord & Reddit (Remplacement ligne complète)
           if [ -n "$DISCORD" ]; then
             sed -i "s|discord: .*|discord: \"$DISCORD\",|g" $CONFIG_FILE
           else
@@ -124,6 +121,7 @@ jobs:
           # > Versioning Intelligent
           sed -i "s|type: \"github\"|type: \"local\"|g" $CONFIG_FILE
           
+          # Si LATEST_TAG est vide, on laisse vide. Sinon on l'injecte.
           if [ -n "$LATEST_TAG" ]; then
              sed -i "s|manualVersion: \".*\"|manualVersion: \"$LATEST_TAG\"|g" $CONFIG_FILE
           else

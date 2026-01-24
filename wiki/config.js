@@ -6,13 +6,13 @@
 const CONFIG = {
     // Project Information (Sera remplacé par le nom du Repo)
     projectName: "ACIDWIKI",
-    projectSubtitle: "ACIDWIKI WIKI",
-    description: "Official Documentation and Wiki for AcidWiki",
+    projectSubtitle: "WIKI NODE",
+    description: "Official Documentation and Wiki",
 
     // Versioning Settings
     versioning: {
         type: "local",
-        manualVersion: "{"message":"Not Found","documentation_url":"https://docs.github.com/rest/releases/releases#get-the-latest-release","status":"404"}", // Laisser vide. Le workflow mettra le tag ici.
+        manualVersion: "",
         manualDate: "2026-01-24"
     },
 
@@ -62,7 +62,7 @@ const CONFIG = {
     },
 
     // Footer
-    footerText: "© 2026 ACIDWIKI WIKI - All rights reserved",
+    footerText: "© 2026 ACIDWIKI - All rights reserved",
 
     // UI Strings
     ui: {
@@ -97,7 +97,7 @@ const CONFIG = {
     social: {
         discord: null,
         reddit: null,
-        github: "https://github.com/infinition/AcidWiki", // Virgule laissée ici exprès, elle sera respectée par le script
+        github: "https://github.com/infinition/AcidWiki", // Virgule respectée par le script
         buyMeACoffee: "https://buymeacoffee.com/infinition"
     },
 
