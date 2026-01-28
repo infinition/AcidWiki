@@ -87,10 +87,12 @@ jobs:
           
           # Moteur & Système (Tout est à la racine de la source)
           cp -fv temp_source/index.html .
-          cp -fv temp_source/manifest.json .
           cp -fv temp_source/sw.js .
           cp -fv temp_source/robots.txt . || true
           cp -fv temp_source/.nojekyll . || true
+          
+          # Manifest PWA (nouveau chemin)
+          cp -fv temp_source/wiki/manifest.pwa.json wiki/
           
           # Fichiers Security (S'ils n'ont pas été supprimés par la protection)
           if [ -f "temp_source/security.txt" ]; then cp -fv temp_source/security.txt .; fi
@@ -130,7 +132,7 @@ jobs:
         run: |
           CONFIG_FILE="wiki/config.js"
           JSON_FILE="acidwiki.json"
-          MANIFEST_FILE="manifest.json"
+          MANIFEST_FILE="wiki/manifest.pwa.json"
           
           # --- 1. DÉTECTION ---
           REPO_NAME=$(echo "$REPO_FULL" | awk -F '/' '{print $2}')
@@ -175,7 +177,7 @@ jobs:
           # Footer & Logo
           sed -i "s|footerText: \".*\"|footerText: \"© $YEAR ${REPO_NAME^^} WIKI - All rights reserved\"|g" $CONFIG_FILE
           sed -i "s|logoPath: \".*\"|logoPath: \"wiki/assets/logo.png\"|g" $CONFIG_FILE
-          sed -i "s|manifestPath: \".*\"|manifestPath: \"manifest.json\"|g" $CONFIG_FILE
+          sed -i "s|manifestPath: \".*\"|manifestPath: \"wiki/manifest.pwa.json\"|g" $CONFIG_FILE
           sed -i "s|debug: false|debug: $DEBUG_MODE|g" $CONFIG_FILE
 
           # Github & Social
@@ -236,7 +238,7 @@ jobs:
           git config --local user.name "GitHub Action"
           
           # Ajout de tous les fichiers (Système, Contenu, Sécurité)
-          git add index.html wiki/ acidwiki.json manifest.json sw.js robots.txt .nojekyll security.txt .well-known/
+          git add index.html wiki/ acidwiki.json sw.js robots.txt .nojekyll security.txt .well-known/
           
           git diff --quiet && git diff --staged --quiet || (git commit -m "chore: update wiki config [skip ci]" && git push)
       
