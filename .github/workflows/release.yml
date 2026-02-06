@@ -1,4 +1,4 @@
-name: AcidWiki Archive Release
+name: AcidWiki Archive Releases
 
 on:
   push:
