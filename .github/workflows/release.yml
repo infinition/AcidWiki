@@ -1,0 +1,58 @@
+name: AcidWiki Archive Release
+
+on:
+  push:
+    tags:
+      - "*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+
+    steps:
+      # 1️⃣ Checkout full history (important for tags)
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # 2️⃣ Generate changelog since last tag
+      - name: Generate release notes
+        run: |
+          echo "🔍 Detecting previous tag..."
+          LAST_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
+
+          if [ -z "$LAST_TAG" ]; then
+            echo "RELEASE_NOTES=🚀 Initial AcidWiki snapshot" >> $GITHUB_ENV
+          else
+            echo "RELEASE_NOTES<<EOF" >> $GITHUB_ENV
+            git log $LAST_TAG..HEAD --pretty=format:"- %s" >> $GITHUB_ENV
+            echo "EOF" >> $GITHUB_ENV
+          fi
+
+      # 3️⃣ Create GitHub Release (archive only)
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          name: ${{ github.ref_name }}
+          body: |
+            ## 🧠 AcidWiki Engine Snapshot
+
+            This release is an **archived snapshot** of the AcidWiki engine and templates.
+
+            It exists to:
+            - track engine evolution over time
+            - provide stable reference points
+            - support rollback / comparison if needed
+
+            ### 📝 Changes since last snapshot
+            ${{ env.RELEASE_NOTES }}
+
+            ---
+            🔒 This release does **not** affect client repositories directly.  
+            🔄 Client wikis always sync from the `main` branch unless pinned manually.
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
