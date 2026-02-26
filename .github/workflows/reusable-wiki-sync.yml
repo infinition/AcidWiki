@@ -201,7 +201,6 @@ jobs:
           else
              sed -i "s|manualVersion: \".*\"|manualVersion: \"\"|g" $CONFIG_FILE
           fi
-          sed -i "s|manualDate: \".*\"|manualDate: \"$(date +'%Y-%m-%d')\"|g" $CONFIG_FILE
 
           # --- 4. INJECTION MANIFEST PWA ---
           echo "Injecting Manifest Data..."
@@ -214,23 +213,55 @@ jobs:
                $MANIFEST_FILE > manifest.tmp && mv manifest.tmp $MANIFEST_FILE
           fi
 
-          # --- 5. INJECTION SECURITY.TXT (DYNAMIQUE) ---
-          # Calcule la date d'expiration (+1 an)
-          EXP_DATE=$(date -d "+1 year" -u +"%Y-%m-%dT%H:%M:%S.000Z")
-          
-          update_security_file() {
+          # --- 5. INJECTION SECURITY.TXT (LIENS UNIQUEMENT) ---
+          update_security_repo() {
             local file=$1
             if [ -f "$file" ]; then
-              echo "Updating $file..."
-              # Remplace l'ancien repo (source) par le nouveau (ex: infinition/AcidWiki -> infinition/Bjorn)
               sed -i "s|infinition/AcidWiki|$REPO_FULL|g" "$file"
-              # Met à jour la date d'expiration
-              sed -i "s|Expires: .*|Expires: $EXP_DATE|g" "$file"
             fi
           }
           
-          update_security_file "security.txt"
-          update_security_file ".well-known/security.txt"
+          update_security_repo "security.txt"
+          update_security_repo ".well-known/security.txt"
+
+          # --- 6. SMART DATE INJECTION (ANTI-SPAM COMMITS) ---
+          echo "Checking for real core updates..."
+          
+          # A. Récupérer les dates qui sont actuellement commitées sur le repo
+          OLD_MANUAL_DATE=$(git show HEAD:$CONFIG_FILE 2>/dev/null | grep -oP 'manualDate: "\K[^"]+' || echo "")
+          OLD_EXPIRES=$(git show HEAD:security.txt 2>/dev/null | grep -oP 'Expires: \K.+' || echo "")
+
+          # B. Injecter temporairement ces ANCIENNES dates pour isoler les vrais changements
+          if [ -n "$OLD_MANUAL_DATE" ]; then
+              sed -i "s|manualDate: \".*\"|manualDate: \"$OLD_MANUAL_DATE\"|g" $CONFIG_FILE
+          else
+              sed -i "s|manualDate: \".*\"|manualDate: \"TEMP_DATE\"|g" $CONFIG_FILE
+          fi
+          
+          if [ -n "$OLD_EXPIRES" ]; then
+              sed -i "s|Expires: .*|Expires: $OLD_EXPIRES|g" security.txt 2>/dev/null || true
+              sed -i "s|Expires: .*|Expires: $OLD_EXPIRES|g" .well-known/security.txt 2>/dev/null || true
+          fi
+
+          # C. Vérifier s'il y a d'autres changements
+          git add -N . # Prendre en compte les potentiels nouveaux fichiers
+          
+          if git diff --quiet && git diff --staged --quiet; then
+              echo "✅ Aucun changement réel détecté sur le wiki. Les dates ne seront pas mises à jour."
+              # Remettre les fichiers d'origine tels quels pour que le step 'Commit and Push' soit ignoré
+              git checkout -- $CONFIG_FILE security.txt .well-known/security.txt 2>/dev/null || true
+          else
+              echo "📦 Vrais changements détectés ! Mise à jour des dates à aujourd'hui."
+              
+              # Appliquer la date du jour dans config.js
+              CURRENT_DATE=$(date +'%Y-%m-%d')
+              sed -i "s|manualDate: \".*\"|manualDate: \"$CURRENT_DATE\"|g" $CONFIG_FILE
+              
+              # Appliquer l'expiration (+1 an) dans security.txt
+              EXP_DATE=$(date -d "+1 year" -u +"%Y-%m-%dT%H:%M:%S.000Z")
+              sed -i "s|Expires: .*|Expires: $EXP_DATE|g" security.txt 2>/dev/null || true
+              sed -i "s|Expires: .*|Expires: $EXP_DATE|g" .well-known/security.txt 2>/dev/null || true
+          fi
 
       - name: Commit and Push Changes
         run: |
@@ -241,7 +272,7 @@ jobs:
           git add index.html wiki/ acidwiki.json sw.js robots.txt .nojekyll security.txt .well-known/
           
           git diff --quiet && git diff --staged --quiet || (git commit -m "chore: update wiki config [skip ci]" && git push)
-      
+       
       - name: Auto-Configure GitHub Pages
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
