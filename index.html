@@ -2219,6 +2219,7 @@
                 // 3. Network Fetch (Fallback)
                 if (!text) {
                     try {
+                        const isGitHubPages = /\.github\.io$/i.test(window.location.hostname);
                         if (isRoot && STATE.repo && STATE.branch) {
                             const rawUrl = `https://raw.githubusercontent.com/${STATE.repo}/${STATE.branch}/${filename}`;
                             const resRaw = await fetch(rawUrl);
@@ -2230,7 +2231,7 @@
                             }
                         }
 
-                        if (!text) {
+                        if (!text && !(isRoot && isGitHubPages)) {
                             let path;
                             if (isRoot) {
                                 path = `./${filename}`;
@@ -2454,6 +2455,7 @@
                 (async () => {
                     let text = '';
                     try {
+                        const isGitHubPages = /\.github\.io$/i.test(window.location.hostname);
                         if (isRoot && STATE.repo && STATE.branch) {
                             const rawUrl = `https://raw.githubusercontent.com/${STATE.repo}/${STATE.branch}/${item.file}`;
                             const rawRes = await fetch(rawUrl);
@@ -2463,7 +2465,7 @@
                             }
                         }
 
-                        if (!text) {
+                        if (!text && !(isRoot && isGitHubPages)) {
                             const url = isRoot ? `./${item.file}` : `./${item.folder}/${item.file}`;
                             const res = await fetch(url);
                             if (!res.ok) return;
@@ -3311,9 +3313,16 @@
                 showErrorState("CONFIG failed to load. Check wiki/config.js path.");
             }
 
-            // Register Service Worker
+            // Service Worker disabled: cleanup any previous registrations/caches.
             if ('serviceWorker' in navigator) {
-                navigator.serviceWorker.register('./sw.js').catch(() => { });
+                navigator.serviceWorker.getRegistrations()
+                    .then(regs => Promise.all(regs.map(r => r.unregister())))
+                    .catch(() => { });
+            }
+            if (window.caches && typeof caches.keys === 'function') {
+                caches.keys()
+                    .then(keys => Promise.all(keys.filter(k => /acidwiki|bjorn|wiki/i.test(k)).map(k => caches.delete(k))))
+                    .catch(() => { });
             }
 
             // Mouse tracking for glow effects
