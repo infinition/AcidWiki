@@ -9,8 +9,8 @@ on:
         default: "infinition/AcidWiki"
 
 permissions:
-  contents: write   # REQUIS : Pour que le bot puisse commiter le acidwiki.json dans ton repo
-  pages: write      # REQUIS : Pour le déploiement de l'Artefact
+  contents: write   # REQUIS : Pour créer et commiter .github/acidwiki.json s'il n'existe pas
+  pages: write      # REQUIS : Pour déployer _site
   id-token: write
 
 jobs:
@@ -20,7 +20,7 @@ jobs:
       - name: Checkout Caller Repository
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0 # Indispensable pour pouvoir faire un git push ensuite
+          fetch-depth: 0 # Indispensable pour le git push
 
       - name: Checkout AcidWiki Engine
         uses: actions/checkout@v4
@@ -35,17 +35,21 @@ jobs:
           if [ ! -f ".github/acidwiki.json" ]; then
             echo "⚠️ .github/acidwiki.json introuvable. Récupération depuis le moteur source..."
             
-            # Copie depuis la racine du moteur vers ton dossier .github/
-            cp temp_engine/acidwiki.json .github/acidwiki.json
+            # Copie depuis le moteur vers le dossier .github/ de TON repo
+            if [ -f "temp_engine/acidwiki.json" ]; then
+              cp temp_engine/acidwiki.json .github/acidwiki.json
+            else
+              echo '{"debug": false, "social": {"discord": null, "reddit": null}, "buymeacoffee": "https://buymeacoffee.com/infinition"}' > .github/acidwiki.json
+            fi
             
-            # Commit et push sur ton repo pour que tu puisses le modifier plus tard
+            # Commit automatique sur ton repo
             git config --local user.email "action@github.com"
             git config --local user.name "GitHub Action"
             git add .github/acidwiki.json
             git commit -m "chore: auto-onboarding acidwiki.json [skip ci]"
             git push
           else
-            echo "✅ Configuration .github/acidwiki.json existante trouvée. Aucune modification."
+            echo "✅ Configuration .github/acidwiki.json existante trouvée."
           fi
 
       - name: Assemble Site Directory
@@ -53,7 +57,7 @@ jobs:
           echo "📦 Assemblage du site centralisé dans _site/ ..."
           mkdir -p _site _site/wiki
           
-          # 1. Copie des fichiers racine du moteur
+          # 1. Copie des fichiers racine du moteur (index.html, sw.js, etc)
           cp -fv temp_engine/index.html _site/
           cp -fv temp_engine/sw.js _site/ || true
           cp -fv temp_engine/robots.txt _site/ || true
@@ -61,12 +65,12 @@ jobs:
           if [ -f "temp_engine/security.txt" ]; then cp -fv temp_engine/security.txt _site/ ; fi
           if [ -d "temp_engine/.well-known" ]; then cp -rn temp_engine/.well-known _site/ || true ; fi
           
-          # 2. Copie du contenu système du wiki (themes, config.js par défaut)
+          # 2. Copie du contenu système du wiki
           if [ -d "temp_engine/wiki" ]; then
              cp -a temp_engine/wiki/* _site/wiki/
           fi
           
-          # 3. Fusion avec TES pages locales (ton dossier wiki/docs, etc.)
+          # 3. Fusion avec tes pages locales
           if [ -d "wiki" ]; then
             echo "📂 Copie du contenu wiki local..."
             cp -a wiki/* _site/wiki/ || true
@@ -79,22 +83,27 @@ jobs:
           REPO_FULL: ${{ github.repository }}
         run: |
           CONFIG_FILE="wiki/config.js"
-          JSON_FILE="../.github/acidwiki.json"  # <-- Il va bien lire le fichier dans TON .github/
+          # On pointe bien vers TON fichier dans ton code source
+          JSON_FILE="${GITHUB_WORKSPACE}/.github/acidwiki.json" 
           MANIFEST_FILE="wiki/manifest.pwa.json"
           
           REPO_NAME=$(echo "$REPO_FULL" | awk -F '/' '{print $2}')
           YEAR=$(date +'%Y')
           
+          # --- SECURITE ANTI "Unexpected identifier message" ---
           TAG_REL=$(gh api repos/$REPO_FULL/releases/latest --jq .tag_name 2>/dev/null || echo "")
-          LATEST_TAG=${TAG_REL:-""}
+          TAG_LIST=$(gh api repos/$REPO_FULL/tags --jq '.[0].name' 2>/dev/null || echo "")
+          LATEST_TAG=""
+          if [[ -n "$TAG_REL" && "$TAG_REL" != *\{* ]]; then LATEST_TAG="$TAG_REL"; elif [[ -n "$TAG_LIST" && "$TAG_LIST" != *\{* ]]; then LATEST_TAG="$TAG_LIST"; fi
           
-          # LECTURE DES VARIABLES DE TON JSON
-          DISCORD=$(jq -r '.social.discord // empty' $JSON_FILE)
-          REDDIT=$(jq -r '.social.reddit // empty' $JSON_FILE)
-          COFFEE=$(jq -r '.buymeacoffee // "https://buymeacoffee.com/infinition"' $JSON_FILE)
-          DEBUG_MODE=$(jq -r '.debug' $JSON_FILE)
+          # --- LECTURE SECURISEE DU JSON ---
+          DISCORD=$(jq -r '.social.discord // empty' "$JSON_FILE" 2>/dev/null || echo "")
+          REDDIT=$(jq -r '.social.reddit // empty' "$JSON_FILE" 2>/dev/null || echo "")
+          COFFEE=$(jq -r '.buymeacoffee // empty' "$JSON_FILE" 2>/dev/null || echo "")
+          if [ -z "$COFFEE" ]; then COFFEE="https://buymeacoffee.com/infinition"; fi
+          DEBUG_MODE=$(jq -r '.debug // "false"' "$JSON_FILE" 2>/dev/null || echo "false")
           
-          # INJECTION JS DANS _site/wiki/config.js
+          # --- INJECTION ---
           sed -i "s|projectName: \".*\"|projectName: \"${REPO_NAME^^}\"|g" $CONFIG_FILE
           sed -i "s|projectSubtitle: \".*\"|projectSubtitle: \"${REPO_NAME^^} WIKI\"|g" $CONFIG_FILE
           sed -i "s|description: \".*\"|description: \"Official Documentation and Wiki for ${REPO_NAME}\"|g" $CONFIG_FILE
@@ -105,8 +114,8 @@ jobs:
           sed -i "s|buyMeACoffee: \".*\"|buyMeACoffee: \"$COFFEE\"|g" $CONFIG_FILE
           sed -i "s|debug: false|debug: $DEBUG_MODE|g" $CONFIG_FILE
           
-          if [ -n "$DISCORD" ]; then sed -i "s|discord: .*|discord: \"$DISCORD\",|g" $CONFIG_FILE; else sed -i "s|discord: .*|discord: null,|g" $CONFIG_FILE; fi
-          if [ -n "$REDDIT" ]; then sed -i "s|reddit: .*|reddit: \"$REDDIT\",|g" $CONFIG_FILE; else sed -i "s|reddit: .*|reddit: null,|g" $CONFIG_FILE; fi
+          if [ -n "$DISCORD" ] && [ "$DISCORD" != "null" ]; then sed -i "s|discord: .*|discord: \"$DISCORD\",|g" $CONFIG_FILE; else sed -i "s|discord: .*|discord: null,|g" $CONFIG_FILE; fi
+          if [ -n "$REDDIT" ] && [ "$REDDIT" != "null" ]; then sed -i "s|reddit: .*|reddit: \"$REDDIT\",|g" $CONFIG_FILE; else sed -i "s|reddit: .*|reddit: null,|g" $CONFIG_FILE; fi
           
           sed -i "s|top: \[.*|top: [],|g" $CONFIG_FILE
           sed -i "s|bottom: \[.*|bottom: []|g" $CONFIG_FILE
@@ -121,21 +130,13 @@ jobs:
             sed -i "s|manualVersion: \".*\"|manualVersion: \"\"|g" $CONFIG_FILE
           fi
 
-          # INJECTION MANIFEST PWA
           if [ -f "$MANIFEST_FILE" ]; then
             jq --arg name "${REPO_NAME^^} WIKI" --arg short "$REPO_NAME" '.name = $name | .short_name = $short' $MANIFEST_FILE > manifest.tmp && mv manifest.tmp $MANIFEST_FILE
           fi
 
-          # SÉCURITÉ
           EXP_DATE=$(date -d "+1 year" -u +"%Y-%m-%dT%H:%M:%S.000Z")
-          if [ -f "security.txt" ]; then 
-            sed -i "s|infinition/AcidWiki|$REPO_FULL|g" security.txt
-            sed -i "s|Expires: .*|Expires: $EXP_DATE|g" security.txt
-          fi
-          if [ -f ".well-known/security.txt" ]; then 
-            sed -i "s|infinition/AcidWiki|$REPO_FULL|g" .well-known/security.txt
-            sed -i "s|Expires: .*|Expires: $EXP_DATE|g" .well-known/security.txt
-          fi
+          if [ -f "security.txt" ]; then sed -i "s|infinition/AcidWiki|$REPO_FULL|g" security.txt && sed -i "s|Expires: .*|Expires: $EXP_DATE|g" security.txt; fi
+          if [ -f ".well-known/security.txt" ]; then sed -i "s|infinition/AcidWiki|$REPO_FULL|g" .well-known/security.txt && sed -i "s|Expires: .*|Expires: $EXP_DATE|g" .well-known/security.txt; fi
 
       - name: Setup Pages
         uses: actions/configure-pages@v4
