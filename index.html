@@ -1991,6 +1991,7 @@
                     Promise.resolve()
                         .then(async () => {
                             let text = '';
+                            const isGitHubPages = /\.github\.io$/i.test(window.location.hostname);
 
                             // Prefer raw GitHub first for root .md to avoid noisy 404 on GitHub Pages.
                             if (STATE.repo && STATE.branch) {
@@ -2005,7 +2006,7 @@
                             }
 
                             // Fallback to local file (useful in local previews).
-                            if (!text || !text.trim() || text.trim().startsWith('<')) {
+                            if ((!text || !text.trim() || text.trim().startsWith('<')) && !isGitHubPages) {
                                 try {
                                     const res = await fetch(filename);
                                     if (res.ok) {
