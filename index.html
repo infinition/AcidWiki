@@ -1901,12 +1901,23 @@
             }
         }
 
-        /** Convertit une URL virtuelle ?page=README_ik5745.md en nom réel README.md pour la recherche. */
-        function pageParamToRealForRoot(pageParam) {
-            if (!pageParam || !pageParam.endsWith('.md')) return pageParam;
-            const m = pageParam.match(/^(.+)_([a-z0-9]+)\.md$/);
-            if (m) return m[1] + '.md';
-            return pageParam;
+        function addWikiIdToFilename(filename) {
+            if (!filename || !filename.endsWith('.md') || !STATE.wikiId) return filename;
+            return filename.replace(/\.md$/, `_${STATE.wikiId}.md`);
+        }
+
+        function stripWikiIdFromFilename(filename) {
+            if (!filename || !filename.endsWith('.md')) return filename;
+            const m = filename.match(/^(.+)_([a-z0-9]{6,12})\.md$/);
+            return m ? `${m[1]}.md` : filename;
+        }
+
+        function stripWikiIdFromPageParam(pageParam) {
+            if (!pageParam || !pageParam.includes('.md')) return pageParam;
+            const parts = pageParam.split('/');
+            const last = parts[parts.length - 1];
+            parts[parts.length - 1] = stripWikiIdFromFilename(last);
+            return parts.join('/');
         }
 
         function handleInitialRoute() {
@@ -1917,10 +1928,10 @@
                 toggleVersionsPage(null, false);
             } else if (pageParam) {
                 const flatList = getFlatPageList();
-                const paramForRoot = pageParamToRealForRoot(pageParam);
+                const normalizedPageParam = stripWikiIdFromPageParam(pageParam);
                 const found = flatList.find(item => {
-                    if (item.folder === '') return item.file === paramForRoot || item.file === pageParam;
-                    return `${item.folder}/${item.file}` === pageParam || item.file === pageParam;
+                    if (item.folder === '') return item.file === normalizedPageParam || item.file === pageParam;
+                    return `${item.folder}/${item.file}` === normalizedPageParam || item.file === normalizedPageParam;
                 });
 
                 if (found) {
@@ -2157,7 +2168,7 @@
 
             try {
                 let text;
-                const cacheKey = (isRoot && STATE.wikiId) ? `__root__${STATE.wikiId}/${filename}` : `${folder}/${filename}`;
+                const cacheKey = STATE.wikiId ? `${STATE.wikiId}|${folder}|${filename}` : `${folder}|${filename}`;
                 const storageKey = `bjorn_content_${cacheKey.replace(/\//g, '_')}`;
                 const now = Date.now();
                 const TTL = 3600 * 1000 * 24; // 24 Hours Cache
@@ -2274,9 +2285,10 @@
                 renderPagination(folder, title);
 
                 if (pushHistory) {
+                    const encodedFilename = addWikiIdToFilename(filename);
                     const newUrl = folder
-                        ? `?page=${folder}/${filename}`
-                        : (STATE.wikiId ? `?page=${filename.replace(/\.md$/, `_${STATE.wikiId}.md`)}` : `?page=${filename}`);
+                        ? `?page=${folder}/${encodedFilename}`
+                        : `?page=${encodedFilename}`;
                     window.history.pushState({ folder, title, filename }, "", newUrl);
                 }
 
@@ -2403,7 +2415,7 @@
                 if (!flatList[i]) return;
                 const item = flatList[i];
                 const isRoot = item.folder === '';
-                const cacheKey = (isRoot && STATE.wikiId) ? `__root__${STATE.wikiId}/${item.file}` : `${item.folder}/${item.file}`;
+                const cacheKey = STATE.wikiId ? `${STATE.wikiId}|${item.folder}|${item.file}` : `${item.folder}|${item.file}`;
                 const storageKey = `bjorn_content_${cacheKey.replace(/\//g, '_')}`;
                 if (localStorage.getItem(storageKey)) return;
                 const url = isRoot ? `./${item.file}` : `./${item.folder}/${item.file}`;
@@ -2736,9 +2748,10 @@
                         const filename = value;
                         const link = document.createElement('a');
                         const isRootFile = currentPath === '__root__';
+                        const encodedFilename = addWikiIdToFilename(filename);
                         const fullPath = isRootFile
-                            ? (STATE.wikiId ? filename.replace(/\.md$/, `_${STATE.wikiId}.md`) : filename)
-                            : (currentPath ? `${currentPath}/${filename}` : filename);
+                            ? encodedFilename
+                            : (currentPath ? `${currentPath}/${encodedFilename}` : encodedFilename);
                         link.href = `?page=${fullPath}`;
 
                         const linkFolder = isRootFile ? '' : currentPath;
