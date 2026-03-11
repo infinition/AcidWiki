@@ -85,7 +85,7 @@ const CONFIG = {
     },
 
     // Logo Settings
-    logoPath: ".github/assets/icon.png",
+    logoPath: ".github/assets/logo.png",
     logoPlaceholder: "https://placehold.co/40x40/111214/22c55e?text=A",
 
     // PWA & SEO Settings
@@ -108,3 +108,4 @@ const CONFIG = {
         githubLabel: "ACIDWIKI"
     }
 };
+
