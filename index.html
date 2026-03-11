@@ -1286,12 +1286,31 @@
             STATE.repo = CONFIG.repo;
             STATE.branch = CONFIG.branch;
             // Identifiant unique par repo pour éviter conflits de cache localStorage entre différentes GitHub Pages
+            // Utilise un token aléatoire persistant (ex: README_53r9ce.md) plutôt qu'un hash fixe.
             const shortHash = (str) => {
                 let h = 0;
                 for (let i = 0; i < str.length; i++) { h = ((h << 5) - h) + str.charCodeAt(i); h |= 0; }
                 return Math.abs(h).toString(36).slice(0, 12);
             };
-            STATE.wikiId = (CONFIG.repo && shortHash(CONFIG.repo)) || '';
+            const randomId = (len = 6) => {
+                const chars = 'abcdefghijklmnopqrstuvwxyz0123456789';
+                let out = '';
+                for (let i = 0; i < len; i++) out += chars[Math.floor(Math.random() * chars.length)];
+                return out;
+            };
+            try {
+                const repoHash = (CONFIG.repo && shortHash(CONFIG.repo)) || 'default';
+                const tokenKey = `acidwiki_ns_${repoHash}`;
+                let token = localStorage.getItem(tokenKey);
+                if (!token || !/^[a-z0-9]{6,12}$/.test(token)) {
+                    token = randomId(6);
+                    localStorage.setItem(tokenKey, token);
+                }
+                STATE.wikiId = token;
+            } catch (_) {
+                // Fallback sans localStorage
+                STATE.wikiId = randomId(6);
+            }
         } else {
             console.error("CRITICAL: CONFIG not loaded from wiki/config.js");
         }
