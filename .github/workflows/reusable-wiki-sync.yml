@@ -9,9 +9,9 @@ on:
         default: "infinition/AcidWiki"
 
 permissions:
-  contents: read
-  pages: write
-  id-token: write
+  contents: read    # Lecture seule sur le repo (plus de commit "sale")
+  pages: write      # Droit de publier sur GH Pages
+  id-token: write   # Requis pour l'authentification GH Pages
 
 jobs:
   build-and-deploy:
@@ -20,9 +20,6 @@ jobs:
       - name: Checkout Caller Repository
         uses: actions/checkout@v4
 
-      - name: Create Build Directory
-        run: mkdir -p _site _site/wiki
-
       - name: Checkout AcidWiki Engine
         uses: actions/checkout@v4
         with:
@@ -30,37 +27,39 @@ jobs:
           path: temp_engine
           ref: main
 
-      - name: Assemble Site
+      - name: Assemble Site Directory
         run: |
-          echo "📦 Assemblage du site dans _site/ ..."
+          echo "📦 Création du dossier d'artefact _site..."
+          mkdir -p _site
           
-          # 1. Copie des fichiers racine du moteur (index.html, sw.js, etc.)
-          cp -fv temp_engine/index.html _site/
-          cp -fv temp_engine/sw.js _site/ || true
-          cp -fv temp_engine/robots.txt _site/ || true
-          cp -fv temp_engine/.nojekyll _site/ || true
+          # 1. Copie du système de base (index, sw, config par défaut)
+          cp -a temp_engine/* _site/
+          cp -a temp_engine/.nojekyll _site/ || true
+          cp -a temp_engine/.well-known _site/ || true
           
-          if [ -f "temp_engine/security.txt" ]; then cp -fv temp_engine/security.txt _site/ ; fi
-          if [ -d "temp_engine/.well-known" ]; then cp -rn temp_engine/.well-known _site/ || true ; fi
-          
-          # 2. Copie du dossier wiki du moteur (assets, config.js, themes, manifest)
-          if [ -d "temp_engine/wiki" ]; then
-             cp -a temp_engine/wiki/* _site/wiki/
-          fi
-          
-          # 3. Écrase avec le contenu spécifique du projet appelant (docs/, assets custom, etc.)
+          # 2. Copie du contenu utilisateur (le dossier wiki/ du repo cible)
           if [ -d "wiki" ]; then
-            echo "Copie du dossier wiki local..."
+            echo "📂 Copie du dossier wiki/ local..."
             cp -a wiki/* _site/wiki/ || true
           fi
           
-          # 4. Copie de la configuration JSON locale depuis .github/
+          # 3. Gestion de la configuration centralisée
           if [ -f ".github/acidwiki.json" ]; then
-            echo "✅ Configuration .github/acidwiki.json trouvée."
-            cp .github/acidwiki.json _site/wiki/acidwiki.json
+            echo "✅ Fichier .github/acidwiki.json trouvé."
+            # On le copie à la RACINE de _site pour que l'injection fonctionne
+            cp .github/acidwiki.json _site/acidwiki.json
           else
-            echo "⚠️ Création d'une configuration par défaut..."
-            echo '{"debug": false, "social": {"discord": null, "reddit": null}, "buymeacoffee": "https://buymeacoffee.com/infinition"}' > _site/wiki/acidwiki.json
+            echo "⚠️ Fichier .github/acidwiki.json non trouvé. Création de la configuration par défaut..."
+            cat <<EOF > _site/acidwiki.json
+            {
+              "debug": false,
+              "social": {
+                "discord": null,
+                "reddit": null
+              },
+              "buymeacoffee": "https://buymeacoffee.com/infinition"
+            }
+          EOF
           fi
 
       - name: Dynamic Config Injection
@@ -70,21 +69,25 @@ jobs:
           REPO_FULL: ${{ github.repository }}
         run: |
           CONFIG_FILE="wiki/config.js"
-          JSON_FILE="wiki/acidwiki.json"
+          JSON_FILE="acidwiki.json"
           MANIFEST_FILE="wiki/manifest.pwa.json"
           
           REPO_NAME=$(echo "$REPO_FULL" | awk -F '/' '{print $2}')
           YEAR=$(date +'%Y')
           
+          # Récupération de la version
           TAG_REL=$(gh api repos/$REPO_FULL/releases/latest --jq .tag_name 2>/dev/null || echo "")
-          LATEST_TAG=${TAG_REL:-""}
+          TAG_LIST=$(gh api repos/$REPO_FULL/tags --jq '.[0].name' 2>/dev/null || echo "")
+          LATEST_TAG=""
+          if [[ -n "$TAG_REL" && "$TAG_REL" != *\{* ]]; then LATEST_TAG="$TAG_REL"; elif [[ -n "$TAG_LIST" && "$TAG_LIST" != *\{* ]]; then LATEST_TAG="$TAG_LIST"; fi
           
+          # Lecture des variables JSON
           DISCORD=$(jq -r '.social.discord // empty' $JSON_FILE)
           REDDIT=$(jq -r '.social.reddit // empty' $JSON_FILE)
           COFFEE=$(jq -r '.buymeacoffee // "https://buymeacoffee.com/infinition"' $JSON_FILE)
           DEBUG_MODE=$(jq -r '.debug' $JSON_FILE)
           
-          # INJECTION JS
+          # Injection
           sed -i "s|projectName: \".*\"|projectName: \"${REPO_NAME^^}\"|g" $CONFIG_FILE
           sed -i "s|projectSubtitle: \".*\"|projectSubtitle: \"${REPO_NAME^^} WIKI\"|g" $CONFIG_FILE
           sed -i "s|description: \".*\"|description: \"Official Documentation and Wiki for ${REPO_NAME}\"|g" $CONFIG_FILE
@@ -95,42 +98,35 @@ jobs:
           sed -i "s|buyMeACoffee: \".*\"|buyMeACoffee: \"$COFFEE\"|g" $CONFIG_FILE
           sed -i "s|debug: false|debug: $DEBUG_MODE|g" $CONFIG_FILE
           
-          if [ -n "$DISCORD" ]; then sed -i "s|discord: .*|discord: \"$DISCORD\",|g" $CONFIG_FILE; fi
-          if [ -n "$REDDIT" ]; then sed -i "s|reddit: .*|reddit: \"$REDDIT\",|g" $CONFIG_FILE; fi
+          if [ -n "$DISCORD" ]; then sed -i "s|discord: .*|discord: \"$DISCORD\",|g" $CONFIG_FILE; else sed -i "s|discord: .*|discord: null,|g" $CONFIG_FILE; fi
+          if [ -n "$REDDIT" ]; then sed -i "s|reddit: .*|reddit: \"$REDDIT\",|g" $CONFIG_FILE; else sed -i "s|reddit: .*|reddit: null,|g" $CONFIG_FILE; fi
           
           sed -i "s|top: \[.*|top: [],|g" $CONFIG_FILE
           sed -i "s|bottom: \[.*|bottom: []|g" $CONFIG_FILE
           sed -i "s|type: \"github\"|type: \"local\"|g" $CONFIG_FILE
           
+          # Date et Version
           CURRENT_DATE=$(date +'%Y-%m-%d')
           sed -i "s|manualDate: \".*\"|manualDate: \"$CURRENT_DATE\"|g" $CONFIG_FILE
-          
-          if [ -n "$LATEST_TAG" ]; then
-            sed -i "s|manualVersion: \".*\"|manualVersion: \"$LATEST_TAG\"|g" $CONFIG_FILE
-          else
-            sed -i "s|manualVersion: \".*\"|manualVersion: \"\"|g" $CONFIG_FILE
-          fi
+          if [ -n "$LATEST_TAG" ]; then sed -i "s|manualVersion: \".*\"|manualVersion: \"$LATEST_TAG\"|g" $CONFIG_FILE; else sed -i "s|manualVersion: \".*\"|manualVersion: \"\"|g" $CONFIG_FILE; fi
 
-          # INJECTION MANIFEST PWA
+          # Injection Manifest PWA
           if [ -f "$MANIFEST_FILE" ]; then
             jq --arg name "${REPO_NAME^^} WIKI" --arg short "$REPO_NAME" '.name = $name | .short_name = $short' $MANIFEST_FILE > manifest.tmp && mv manifest.tmp $MANIFEST_FILE
           fi
 
-          # SÉCURITÉ
+          # Sécurité (Si les fichiers existent)
           EXP_DATE=$(date -d "+1 year" -u +"%Y-%m-%dT%H:%M:%S.000Z")
-          if [ -f "security.txt" ]; then 
-            sed -i "s|infinition/AcidWiki|$REPO_FULL|g" security.txt
-            sed -i "s|Expires: .*|Expires: $EXP_DATE|g" security.txt
-          fi
-          if [ -f ".well-known/security.txt" ]; then 
-            sed -i "s|infinition/AcidWiki|$REPO_FULL|g" .well-known/security.txt
-            sed -i "s|Expires: .*|Expires: $EXP_DATE|g" .well-known/security.txt
-          fi
+          if [ -f "security.txt" ]; then sed -i "s|infinition/AcidWiki|$REPO_FULL|g" security.txt && sed -i "s|Expires: .*|Expires: $EXP_DATE|g" security.txt; fi
+          if [ -f ".well-known/security.txt" ]; then sed -i "s|infinition/AcidWiki|$REPO_FULL|g" .well-known/security.txt && sed -i "s|Expires: .*|Expires: $EXP_DATE|g" .well-known/security.txt; fi
 
-      - name: Upload Pages artifact
+      - name: Setup Pages
+        uses: actions/configure-pages@v4
+
+      - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: ./_site
+          path: './_site' # On envoie uniquement le dossier assemblé
 
       - name: Deploy to GitHub Pages
         id: deployment
