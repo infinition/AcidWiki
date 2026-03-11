@@ -1,25 +1,27 @@
-const CACHE_NAME = 'bjorn-wiki-v2';
+const CACHE_NAME = 'acidwiki-v3';
 const STATIC_ASSETS = [
     './',
     './index.html',
-    './config.js',
-    './manifest.json',
-    './assets/bjorn.png',
-    'https://cdn.tailwindcss.com',
-    'https://unpkg.com/lucide@latest',
-    'https://cdn.jsdelivr.net/npm/marked/marked.min.js',
-    'https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.0.6/purify.min.js',
-    'https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-dark.min.css',
-    'https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js',
-    'https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Inter:wght@400;500;600&display=swap'
+    './wiki/config.js',
+    './wiki/manifest.pwa.json',
+    './wiki/assets/logo.png'
 ];
 
 // Install Event - Cache Static Assets
 self.addEventListener('install', (event) => {
     event.waitUntil(
-        caches.open(CACHE_NAME).then((cache) => {
+        caches.open(CACHE_NAME).then(async (cache) => {
             console.log('[SW] Caching static assets');
-            return cache.addAll(STATIC_ASSETS);
+            // Cache assets one by one to avoid failing install on a single missing resource.
+            await Promise.all(STATIC_ASSETS.map(async (url) => {
+                try {
+                    const req = new Request(url, { cache: 'no-cache' });
+                    const res = await fetch(req);
+                    if (res && res.ok) await cache.put(req, res.clone());
+                } catch (_) {
+                    // Ignore optional/missing asset during install.
+                }
+            }));
         })
     );
     self.skipWaiting();

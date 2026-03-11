@@ -1902,12 +1902,12 @@
         }
 
         function addWikiIdToFilename(filename) {
-            if (!filename || !filename.endsWith('.md') || !STATE.wikiId) return filename;
-            return filename.replace(/\.md$/, `_${STATE.wikiId}.md`);
+            if (!filename || !/\.md$/i.test(filename) || !STATE.wikiId) return filename;
+            return filename.replace(/\.md$/i, `_${STATE.wikiId}.md`);
         }
 
         function stripWikiIdFromFilename(filename) {
-            if (!filename || !filename.endsWith('.md')) return filename;
+            if (!filename || !/\.md$/i.test(filename)) return filename;
             const m = filename.match(/^(.+)_([a-z0-9]{6,12})\.md$/);
             return m ? `${m[1]}.md` : filename;
         }
@@ -1988,19 +1988,29 @@
             // 2. --- INDEXING ROOT .MD FILES (Project Home) ---
             (STATE.rootMdFiles || []).forEach(({ title, filename }) => {
                 promises.push(
-                    fetch(filename)
-                        .then(async res => {
+                    Promise.resolve()
+                        .then(async () => {
                             let text = '';
-                            if (res.ok) text = await res.text();
 
-                            // Align with content loader: fallback to raw GitHub for root files.
-                            if ((!text || !text.trim() || text.trim().startsWith('<')) && STATE.repo && STATE.branch) {
+                            // Prefer raw GitHub first for root .md to avoid noisy 404 on GitHub Pages.
+                            if (STATE.repo && STATE.branch) {
                                 try {
                                     const rawUrl = `https://raw.githubusercontent.com/${STATE.repo}/${STATE.branch}/${filename}`;
                                     const rawRes = await fetch(rawUrl);
                                     if (rawRes.ok) {
                                         const rawText = await rawRes.text();
                                         if (rawText && !rawText.trim().startsWith('<')) text = rawText;
+                                    }
+                                } catch (_) { }
+                            }
+
+                            // Fallback to local file (useful in local previews).
+                            if (!text || !text.trim() || text.trim().startsWith('<')) {
+                                try {
+                                    const res = await fetch(filename);
+                                    if (res.ok) {
+                                        const localText = await res.text();
+                                        if (localText && !localText.trim().startsWith('<')) text = localText;
                                     }
                                 } catch (_) { }
                             }
