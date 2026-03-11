@@ -1920,6 +1920,13 @@
             return parts.join('/');
         }
 
+        function isHtmlDocumentText(text) {
+            if (!text || typeof text !== 'string') return false;
+            const sample = text.trim().slice(0, 512).toLowerCase();
+            return sample.startsWith('<!doctype html') ||
+                sample.startsWith('<html');
+        }
+
         function handleInitialRoute() {
             const urlParams = new URLSearchParams(window.location.search);
             const pageParam = urlParams.get('page');
@@ -2000,23 +2007,23 @@
                                     const rawRes = await fetch(rawUrl);
                                     if (rawRes.ok) {
                                         const rawText = await rawRes.text();
-                                        if (rawText && !rawText.trim().startsWith('<')) text = rawText;
+                                        if (rawText && !isHtmlDocumentText(rawText)) text = rawText;
                                     }
                                 } catch (_) { }
                             }
 
                             // Fallback to local file (useful in local previews).
-                            if ((!text || !text.trim() || text.trim().startsWith('<')) && !isGitHubPages) {
+                            if ((!text || !text.trim() || isHtmlDocumentText(text)) && !isGitHubPages) {
                                 try {
                                     const res = await fetch(filename);
                                     if (res.ok) {
                                         const localText = await res.text();
-                                        if (localText && !localText.trim().startsWith('<')) text = localText;
+                                        if (localText && !isHtmlDocumentText(localText)) text = localText;
                                     }
                                 } catch (_) { }
                             }
 
-                            if (!text || !text.trim() || text.trim().startsWith('<')) return;
+                            if (!text || !text.trim() || isHtmlDocumentText(text)) return;
                             STATE.searchIndex.push({
                                 folder: '',
                                 title,
@@ -2226,7 +2233,7 @@
                             const resRaw = await fetch(rawUrl);
                             if (resRaw.ok) {
                                 const rawText = await resRaw.text();
-                                if (rawText && rawText.trim() && !rawText.trim().startsWith('<')) {
+                                if (rawText && rawText.trim() && !isHtmlDocumentText(rawText)) {
                                     text = rawText;
                                 }
                             }
@@ -2249,13 +2256,13 @@
                         }
                     } catch (e) {
                         // Pour les fichiers racine : repli sur raw GitHub
-                        if (isRoot && (!text || !text.trim() || text.trim().startsWith('<')) && STATE.repo && STATE.branch) {
+                        if (isRoot && (!text || !text.trim() || isHtmlDocumentText(text)) && STATE.repo && STATE.branch) {
                             try {
                                 const rawUrl = `https://raw.githubusercontent.com/${STATE.repo}/${STATE.branch}/${filename}`;
                                 const resRaw = await fetch(rawUrl);
                                 if (resRaw.ok) {
                                     const rawText = await resRaw.text();
-                                    if (rawText && rawText.trim() && !rawText.trim().startsWith('<')) text = rawText;
+                                    if (rawText && rawText.trim() && !isHtmlDocumentText(rawText)) text = rawText;
                                 }
                             } catch (e2) { /* ignore */ }
                         }
@@ -2275,7 +2282,7 @@
                         }
                     }
 
-                    if (!text || !text.trim() || text.trim().startsWith('<')) {
+                    if (!text || !text.trim() || isHtmlDocumentText(text)) {
                         throw new Error('Content not found.');
                     }
 
@@ -2462,7 +2469,7 @@
                             const rawRes = await fetch(rawUrl);
                             if (rawRes.ok) {
                                 const rawText = await rawRes.text();
-                                if (rawText && rawText.trim() && !rawText.trim().startsWith('<')) text = rawText;
+                                if (rawText && rawText.trim() && !isHtmlDocumentText(rawText)) text = rawText;
                             }
                         }
 
@@ -2471,7 +2478,7 @@
                             const res = await fetch(url);
                             if (!res.ok) return;
                             const localText = await res.text();
-                            if (localText && localText.trim() && !localText.trim().startsWith('<')) text = localText;
+                            if (localText && localText.trim() && !isHtmlDocumentText(localText)) text = localText;
                         }
 
                         if (!text) return;
