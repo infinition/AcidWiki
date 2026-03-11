@@ -85,7 +85,7 @@ const CONFIG = {
     },
 
     // Logo Settings
-    logoPath: "wiki/assets/logo.png",
+    logoPath: ".github/assets/icon.png",
     logoPlaceholder: "https://placehold.co/40x40/111214/22c55e?text=A",
 
     // PWA & SEO Settings
