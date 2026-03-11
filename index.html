@@ -1684,7 +1684,7 @@
                     const contentRoots = ['wiki', 'docs'];
 
                     data.tree.forEach(item => {
-                        if (item.type !== 'blob' || !item.path.endsWith('.md')) return;
+                        if (item.type !== 'blob' || !/\.md$/i.test(item.path)) return;
                         const root = contentRoots.find(r => item.path.startsWith(`${r}/`));
                         if (root) {
                             const relativePath = item.path.replace(`${root}/`, '');
@@ -1699,12 +1699,12 @@
                             }
 
                             const filename = parts[parts.length - 1];
-                            const title = decodeURIComponent(filename.replace(/\.md$/, '').replace(/_/g, ' '));
+                            const title = decodeURIComponent(filename.replace(/\.md$/i, '').replace(/_/g, ' '));
                             currentLevel[title] = filename;
                             fileCount++;
                         } else if (!item.path.includes('/')) {
                             const filename = item.path;
-                            const title = decodeURIComponent(filename.replace(/\.md$/, '').replace(/_/g, ' '));
+                            const title = decodeURIComponent(filename.replace(/\.md$/i, '').replace(/_/g, ' '));
                             rootMdFiles.push({ title, filename });
                         }
                     });
@@ -1812,7 +1812,7 @@
                         }
 
                         // Determine if it's a folder or file
-                        const isMarkdownFile = href.endsWith('.md');
+                        const isMarkdownFile = /\.md$/i.test(href);
                         const hasTrailingSlash = href.endsWith('/');
 
                         // It's a markdown file
@@ -1822,7 +1822,7 @@
                                 fileName = fileName.split('/').pop();
                             }
 
-                            const title = decodeURIComponent(fileName.replace(/\.md$/, '').replace(/_/g, ' '));
+                            const title = decodeURIComponent(fileName.replace(/\.md$/i, '').replace(/_/g, ' '));
                             parentStructure[title] = fileName;
                             filesFound++;
                         }
@@ -1989,9 +1989,23 @@
             (STATE.rootMdFiles || []).forEach(({ title, filename }) => {
                 promises.push(
                     fetch(filename)
-                        .then(res => { if (!res.ok) return ''; return res.text(); })
-                        .then(text => {
-                            if (!text) return;
+                        .then(async res => {
+                            let text = '';
+                            if (res.ok) text = await res.text();
+
+                            // Align with content loader: fallback to raw GitHub for root files.
+                            if ((!text || !text.trim() || text.trim().startsWith('<')) && STATE.repo && STATE.branch) {
+                                try {
+                                    const rawUrl = `https://raw.githubusercontent.com/${STATE.repo}/${STATE.branch}/${filename}`;
+                                    const rawRes = await fetch(rawUrl);
+                                    if (rawRes.ok) {
+                                        const rawText = await rawRes.text();
+                                        if (rawText && !rawText.trim().startsWith('<')) text = rawText;
+                                    }
+                                } catch (_) { }
+                            }
+
+                            if (!text || !text.trim() || text.trim().startsWith('<')) return;
                             STATE.searchIndex.push({
                                 folder: '',
                                 title,
