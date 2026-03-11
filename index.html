@@ -2219,36 +2219,41 @@
                 // 3. Network Fetch (Fallback)
                 if (!text) {
                     try {
-                        let path;
-                        if (isRoot) {
-                            path = `./${filename}`;
-                        } else {
-                            path = folder ? `./${folder}/${filename}` : `./${filename}`;
-                        }
-
-                        const res = await fetch(path);
-                        if (res.ok) {
-                            text = await res.text();
-                        } else {
-                            throw new Error("404");
-                        }
-                        // Pour les fichiers racine : si vide ou HTML (ex. Jekyll sur GitHub Pages), charger via raw GitHub
-                        if (isRoot && (!text || !text.trim() || text.trim().startsWith('<')) && STATE.repo && STATE.branch) {
+                        if (isRoot && STATE.repo && STATE.branch) {
                             const rawUrl = `https://raw.githubusercontent.com/${STATE.repo}/${STATE.branch}/${filename}`;
                             const resRaw = await fetch(rawUrl);
                             if (resRaw.ok) {
                                 const rawText = await resRaw.text();
-                                if (rawText && !rawText.trim().startsWith('<')) text = rawText;
+                                if (rawText && rawText.trim() && !rawText.trim().startsWith('<')) {
+                                    text = rawText;
+                                }
+                            }
+                        }
+
+                        if (!text) {
+                            let path;
+                            if (isRoot) {
+                                path = `./${filename}`;
+                            } else {
+                                path = folder ? `./${folder}/${filename}` : `./${filename}`;
+                            }
+
+                            const res = await fetch(path);
+                            if (res.ok) {
+                                text = await res.text();
+                            } else {
+                                throw new Error("404");
                             }
                         }
                     } catch (e) {
                         // Pour les fichiers racine : repli sur raw GitHub
-                        if (isRoot && STATE.repo && STATE.branch) {
+                        if (isRoot && (!text || !text.trim() || text.trim().startsWith('<')) && STATE.repo && STATE.branch) {
                             try {
                                 const rawUrl = `https://raw.githubusercontent.com/${STATE.repo}/${STATE.branch}/${filename}`;
                                 const resRaw = await fetch(rawUrl);
                                 if (resRaw.ok) {
-                                    text = await resRaw.text();
+                                    const rawText = await resRaw.text();
+                                    if (rawText && rawText.trim() && !rawText.trim().startsWith('<')) text = rawText;
                                 }
                             } catch (e2) { /* ignore */ }
                         }
@@ -2266,6 +2271,10 @@
                                 throw e;
                             }
                         }
+                    }
+
+                    if (!text || !text.trim() || text.trim().startsWith('<')) {
+                        throw new Error('Content not found.');
                     }
 
                     // Save to caches
@@ -2442,10 +2451,30 @@
                 const cacheKey = STATE.wikiId ? `${STATE.wikiId}|${item.folder}|${item.file}` : `${item.folder}|${item.file}`;
                 const storageKey = `bjorn_content_${cacheKey.replace(/\//g, '_')}`;
                 if (localStorage.getItem(storageKey)) return;
-                const url = isRoot ? `./${item.file}` : `./${item.folder}/${item.file}`;
-                fetch(url).then(r => r.text()).then(t => {
-                    STATE.contentCache[cacheKey] = t;
-                }).catch(() => { });
+                (async () => {
+                    let text = '';
+                    try {
+                        if (isRoot && STATE.repo && STATE.branch) {
+                            const rawUrl = `https://raw.githubusercontent.com/${STATE.repo}/${STATE.branch}/${item.file}`;
+                            const rawRes = await fetch(rawUrl);
+                            if (rawRes.ok) {
+                                const rawText = await rawRes.text();
+                                if (rawText && rawText.trim() && !rawText.trim().startsWith('<')) text = rawText;
+                            }
+                        }
+
+                        if (!text) {
+                            const url = isRoot ? `./${item.file}` : `./${item.folder}/${item.file}`;
+                            const res = await fetch(url);
+                            if (!res.ok) return;
+                            const localText = await res.text();
+                            if (localText && localText.trim() && !localText.trim().startsWith('<')) text = localText;
+                        }
+
+                        if (!text) return;
+                        STATE.contentCache[cacheKey] = text;
+                    } catch (_) { }
+                })();
             });
         }
 
