@@ -1602,7 +1602,7 @@
                         structure = {};
                     } else {
                         console.error('[AcidWiki] ❌ No wiki content found!');
-                        throw new Error("No wiki content found. Please add .md files to wiki/docs/");
+                        throw new Error("No wiki content found. Please add .md files to wiki/ or docs/");
                     }
                 }
 
@@ -1662,14 +1662,17 @@
                     const structure = {};
                     let fileCount = 0;
                     const rootMdFiles = [];
+                    const contentRoots = ['wiki', 'docs'];
 
                     data.tree.forEach(item => {
                         if (item.type !== 'blob' || !item.path.endsWith('.md')) return;
-                        if (item.path.startsWith('wiki/docs/')) {
-                            const relativePath = item.path.replace('wiki/docs/', '');
+                        const root = contentRoots.find(r => item.path.startsWith(`${r}/`));
+                        if (root) {
+                            const relativePath = item.path.replace(`${root}/`, '');
                             const parts = relativePath.split('/');
 
-                            let currentLevel = structure;
+                            if (!structure[root]) structure[root] = {};
+                            let currentLevel = structure[root];
                             for (let i = 0; i < parts.length - 1; i++) {
                                 const folder = parts[i];
                                 if (!currentLevel[folder]) currentLevel[folder] = {};
@@ -1723,21 +1726,14 @@
         async function scanLocalFilesystem() {
             debugLog('[AcidWiki] 🔍 Starting local filesystem scan...');
             try {
-                // Try to fetch the wiki/docs/ directory listing
-                const res = await fetch('./wiki/docs/');
-                if (!res.ok) {
-                    debugLog('[AcidWiki] ❌ Cannot access wiki/docs/ directory');
-                    return null;
-                }
-
-                debugLog('[AcidWiki] ✅ Successfully accessed wiki/docs/');
                 const structure = {};
+                const contentRoots = ['wiki', 'docs'];
 
                 // Recursive function to scan a folder
-                async function scanFolder(path = '', parentStructure = structure) {
-                    debugLog(`[AcidWiki] 📂 Scanning folder: wiki/docs/${path || '(root)'}`);
+                async function scanFolder(sourceRoot, path = '', parentStructure = structure[sourceRoot]) {
+                    debugLog(`[AcidWiki] 📂 Scanning folder: ${sourceRoot}/${path || '(root)'}`);
 
-                    const folderUrl = path ? `./wiki/docs/${path}/` : './wiki/docs/';
+                    const folderUrl = path ? `./${sourceRoot}/${path}/` : `./${sourceRoot}/`;
                     const folderRes = await fetch(folderUrl);
                     if (!folderRes.ok) return;
 
@@ -1764,18 +1760,18 @@
                         }
 
                         // Build expected URL prefix for files in the current folder
-                        const baseDocsPath = '/wiki/docs/';
+                        const baseDocsPath = `/${sourceRoot}/`;
 
-                        // Only process links that contain wiki/docs in their path
+                        // Only process links that contain the current content root in their path
                         if (!href.includes(baseDocsPath)) {
-                            debugLog(`[AcidWiki] ⏭️ Skipped (not in wiki/docs): "${href}"`);
+                            debugLog(`[AcidWiki] ⏭️ Skipped (not in ${sourceRoot}): "${href}"`);
                             continue;
                         }
 
-                        // Extract the part after /wiki/docs/
+                        // Extract the part after /<sourceRoot>/
                         const afterDocs = href.split(baseDocsPath)[1];
                         if (!afterDocs) {
-                            debugLog(`[AcidWiki] ⏭️ Skipped (invalid path after wiki/docs): "${href}"`);
+                            debugLog(`[AcidWiki] ⏭️ Skipped (invalid path after ${sourceRoot}): "${href}"`);
                             continue;
                         }
 
@@ -1833,7 +1829,7 @@
                             }
 
                             try {
-                                await scanFolder(fullPath, parentStructure[folderName]);
+                                await scanFolder(sourceRoot, fullPath, parentStructure[folderName]);
                             } catch (e) {
                                 console.warn(`[AcidWiki] ⚠️ Failed to scan subfolder ${fullPath}:`, e);
                             }
@@ -1846,8 +1842,19 @@
                     debugLog(`[AcidWiki] 📊 Structure for "${path || 'root'}":`, Object.keys(parentStructure));
                 }
 
-                // Start recursive scanning from root
-                await scanFolder();
+                // Start recursive scanning from each root folder if accessible
+                for (const root of contentRoots) {
+                    const rootRes = await fetch(`./${root}/`);
+                    if (!rootRes.ok) {
+                        debugLog(`[AcidWiki] ⏭️ Cannot access ${root}/ directory`);
+                        continue;
+                    }
+
+                    debugLog(`[AcidWiki] ✅ Successfully accessed ${root}/`);
+                    structure[root] = {};
+                    await scanFolder(root);
+                    if (Object.keys(structure[root]).length === 0) delete structure[root];
+                }
 
                 // Sort folders and files recursively
                 function sortStructure(obj) {
@@ -1930,7 +1937,7 @@
                         const folder = currentPath;
 
                         promises.push(
-                            fetch(`./wiki/docs/${folder}/${filename}`)
+                            fetch(`./${folder}/${filename}`)
                                 .then(res => { if (!res.ok) return ''; return res.text(); })
                                 .then(text => {
                                     if (!text) return;
@@ -2162,7 +2169,7 @@
                         if (isRoot) {
                             path = `./${filename}`;
                         } else {
-                            path = folder ? `./wiki/docs/${folder}/${filename}` : `./wiki/docs/${filename}`;
+                            path = folder ? `./${folder}/${filename}` : `./${filename}`;
                         }
 
                         const res = await fetch(path);
@@ -2193,7 +2200,8 @@
                         }
                         if (!text) {
                             if (!isRoot) {
-                                const path2 = `./wiki/docs/${filename}`;
+                                const sourceRoot = folder.split('/')[0] || '';
+                                const path2 = sourceRoot ? `./${sourceRoot}/${filename}` : `./${filename}`;
                                 const res2 = await fetch(path2);
                                 if (res2.ok) {
                                     text = await res2.text();
@@ -2355,7 +2363,7 @@
             }
 
             try {
-                const path = `wiki/docs/${folder}/${filename}`;
+                const path = `${folder}/${filename}`;
                 const res = await fetch(`https://api.github.com/repos/${STATE.repo}/commits?path=${path}&page=1&per_page=1`);
                 if (res.ok) {
                     const data = await res.json();
@@ -2379,7 +2387,7 @@
                 const cacheKey = (isRoot && STATE.wikiId) ? `__root__${STATE.wikiId}/${item.file}` : `${item.folder}/${item.file}`;
                 const storageKey = `bjorn_content_${cacheKey.replace(/\//g, '_')}`;
                 if (localStorage.getItem(storageKey)) return;
-                const url = isRoot ? `./${item.file}` : `./wiki/docs/${item.folder}/${item.file}`;
+                const url = isRoot ? `./${item.file}` : `./${item.folder}/${item.file}`;
                 fetch(url).then(r => r.text()).then(t => {
                     STATE.contentCache[cacheKey] = t;
                 }).catch(() => { });
