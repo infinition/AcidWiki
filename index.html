@@ -16,18 +16,18 @@
     <meta property="og:url" id="og-url" content="">
     <meta property="og:title" id="og-title" content="WIKI NODE">
     <meta property="og:description" id="og-desc" content="Official Documentation and Wiki">
-    <meta property="og:image" id="og-image" content=".github/assets/logo.png">
+    <meta property="og:image" id="og-image" content="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==">
 
     <meta property="twitter:card" content="summary_large_image">
     <meta property="twitter:url" id="tw-url" content="">
     <meta property="twitter:title" id="tw-title" content="WIKI NODE">
     <meta property="twitter:description" id="tw-desc" content="Official Documentation and Wiki">
-    <meta property="twitter:image" id="tw-image" content=".github/assets/logo.png">
+    <meta property="twitter:image" id="tw-image" content="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==">
 
-    <link rel="icon" id="favicon-32" type="image/png" sizes="32x32" href=".github/assets/logo.png">
-    <link rel="icon" id="favicon-16" type="image/png" sizes="16x16" href=".github/assets/logo.png">
-    <link rel="apple-touch-icon" id="apple-icon" sizes="180x180" href=".github/assets/logo.png">
-    <link rel="mask-icon" id="mask-icon" href=".github/assets/logo.png" color="#22c55e">
+    <link rel="icon" id="favicon-32" type="image/png" sizes="32x32" href="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==">
+    <link rel="icon" id="favicon-16" type="image/png" sizes="16x16" href="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==">
+    <link rel="apple-touch-icon" id="apple-icon" sizes="180x180" href="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==">
+    <link rel="mask-icon" id="mask-icon" href="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==" color="#22c55e">
     <meta name="apple-mobile-web-app-title" id="apple-title" content="Wiki">
     <meta name="application-name" id="app-name" content="Wiki">
     <meta name="msapplication-TileColor" id="ms-tile-color" content="#0B0C0E">
@@ -957,7 +957,7 @@
         class="md:hidden flex-none bg-hack-sidebar border-b border-hack-border h-16 flex items-center justify-between px-4 z-[60] relative shadow-lg">
         <div class="flex items-center gap-3 cursor-pointer" onclick="loadDefault()">
             <div class="w-10 h-10">
-                <img id="mobile-logo" src=".github/assets/logo.png"
+                <img id="mobile-logo" src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw=="
                     onerror="this.src='https://placehold.co/40x40/111214/22c55e?text=B'" alt="Logo"
                     class="w-full h-full object-contain drop-shadow-[0_0_5px_rgba(34,197,94,0.3)]">
             </div>
@@ -1019,7 +1019,7 @@
             <div class="flex items-center justify-between mb-4">
                 <div class="flex items-center gap-3 cursor-pointer" onclick="loadDefault()">
                     <div class="w-12 h-12 shrink-0">
-                        <img id="sidebar-logo" src=".github/assets/logo.png"
+                        <img id="sidebar-logo" src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw=="
                             onerror="this.src='https://placehold.co/48x48/111214/22c55e?text=B'" alt="Logo"
                             class="w-full h-full object-contain drop-shadow-[0_0_8px_rgba(34,197,94,0.4)]">
                     </div>
@@ -1319,15 +1319,27 @@
         function applyConfig() {
             if (typeof CONFIG === 'undefined') return;
 
+            function resolveAssetPath(path) {
+                if (!path || typeof path !== 'string') return path;
+                const normalized = path.replace(/\\/g, '/').replace(/^\.\//, '');
+                const isDotGithubAsset = normalized.startsWith('.github/');
+                const isGitHubPages = /\.github\.io$/i.test(window.location.hostname);
+                if (isDotGithubAsset && isGitHubPages && STATE.repo && STATE.branch) {
+                    return `https://raw.githubusercontent.com/${STATE.repo}/${STATE.branch}/${normalized}`;
+                }
+                return path;
+            }
+            const resolvedLogoPath = resolveAssetPath(CONFIG.logoPath);
+
             document.getElementById('site-title').innerText = `${CONFIG.projectName} // ${CONFIG.projectSubtitle}`;
             document.getElementById('meta-description').setAttribute('content', CONFIG.description);
 
             const mobileLogo = document.getElementById('mobile-logo');
-            mobileLogo.src = CONFIG.logoPath;
+            mobileLogo.src = resolvedLogoPath;
             mobileLogo.onerror = () => mobileLogo.src = CONFIG.logoPlaceholder;
 
             const sidebarLogo = document.getElementById('sidebar-logo');
-            sidebarLogo.src = CONFIG.logoPath;
+            sidebarLogo.src = resolvedLogoPath;
             sidebarLogo.onerror = () => sidebarLogo.src = CONFIG.logoPlaceholder;
 
             document.getElementById('mobile-project-name').innerText = CONFIG.projectName;
@@ -1392,17 +1404,17 @@
             document.getElementById('tw-title').content = fullTitle;
             document.getElementById('og-url').content = window.location.href;
             document.getElementById('tw-url').content = window.location.href;
-            document.getElementById('og-image').content = CONFIG.logoPath;
-            document.getElementById('tw-image').content = CONFIG.logoPath;
+            document.getElementById('og-image').content = resolvedLogoPath;
+            document.getElementById('tw-image').content = resolvedLogoPath;
             document.getElementById('og-desc').content = CONFIG.description;
             document.getElementById('tw-desc').content = CONFIG.description;
 
-            document.getElementById('favicon-32').href = CONFIG.logoPath;
-            document.getElementById('favicon-16').href = CONFIG.logoPath;
-            document.getElementById('apple-icon').href = CONFIG.logoPath;
+            document.getElementById('favicon-32').href = resolvedLogoPath;
+            document.getElementById('favicon-16').href = resolvedLogoPath;
+            document.getElementById('apple-icon').href = resolvedLogoPath;
 
             const maskIcon = document.getElementById('mask-icon');
-            maskIcon.href = CONFIG.logoPath;
+            maskIcon.href = resolvedLogoPath;
             maskIcon.setAttribute('color', CONFIG.accentColor || '#22c55e');
 
             document.getElementById('apple-title').content = CONFIG.projectName;
