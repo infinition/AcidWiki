@@ -1606,10 +1606,93 @@
             });
         }
 
+        async function updateSiteBranding() {
+            try {
+                // 1. Priorité : wiki/assets/logo.png
+                const localLogoPath = 'wiki/assets/logo.png';
+                try {
+                    const localLogoRes = await fetch(`./${localLogoPath}`, { method: 'HEAD' });
+                    if (localLogoRes.ok) {
+                        debugLog('[AcidWiki] 🖼️ Using logo from wiki/assets/logo.png');
+                        applyBranding(localLogoPath);
+                        return;
+                    }
+                } catch (_) {}
+
+                // 2. Deuxième priorité : première image du README.md
+                const filename = 'README.md';
+                let text = '';
+                
+                if (STATE.repo && STATE.branch) {
+                    try {
+                        const rawUrl = `https://raw.githubusercontent.com/${STATE.repo}/${STATE.branch}/${filename}`;
+                        const resRaw = await fetch(rawUrl);
+                        if (resRaw.ok) {
+                            const rawText = await resRaw.text();
+                            if (rawText && rawText.trim() && !isHtmlDocumentText(rawText)) {
+                                text = rawText;
+                            }
+                        }
+                    } catch (_) {}
+                }
+                
+                if (!text) {
+                    try {
+                        const res = await fetch(`./${filename}`);
+                        if (res.ok) text = await res.text();
+                    } catch (_) {}
+                }
+                
+                if (text && !isHtmlDocumentText(text)) {
+                    const mdImgMatch = text.match(/!\[.*?\]\((.*?)\)/);
+                    const htmlImgMatch = text.match(/<img.*?src=["'](.*?)["']/);
+                    
+                    let logoUrl = null;
+                    if (mdImgMatch) logoUrl = mdImgMatch[1];
+                    else if (htmlImgMatch) logoUrl = htmlImgMatch[1];
+                    
+                    if (logoUrl) {
+                        if (!logoUrl.startsWith('http') && !logoUrl.startsWith('data:')) {
+                            const isGitHubPages = /\.github\.io$/i.test(window.location.hostname);
+                            if (isGitHubPages && STATE.repo && STATE.branch) {
+                                logoUrl = `https://raw.githubusercontent.com/${STATE.repo}/${STATE.branch}/${logoUrl.replace(/^\.\//, '')}`;
+                            }
+                        }
+                        
+                        debugLog('[AcidWiki] 🖼️ Auto-Logo from README:', logoUrl);
+                        applyBranding(logoUrl);
+                        return;
+                    }
+                }
+                
+                // 3. Fallback : déjà géré par applyConfig() lors de l'initialisation
+            } catch (e) {
+                debugLog('[AcidWiki] ⚠️ Branding update failed:', e);
+            }
+        }
+
+        function applyBranding(logoUrl) {
+            const mobileLogo = document.getElementById('mobile-logo');
+            const sidebarLogo = document.getElementById('sidebar-logo');
+            if (mobileLogo) mobileLogo.src = logoUrl;
+            if (sidebarLogo) sidebarLogo.src = logoUrl;
+            
+            ['favicon-32', 'favicon-16', 'apple-icon', 'mask-icon'].forEach(id => {
+                const el = document.getElementById(id);
+                if (el && el.tagName === 'LINK') el.href = logoUrl;
+            });
+            
+            const ogImg = document.getElementById('og-image');
+            const twImg = document.getElementById('tw-image');
+            if (ogImg) ogImg.content = logoUrl;
+            if (twImg) twImg.content = logoUrl;
+        }
+
         // --- 4. WIKI CORE ---
         async function initWiki() {
             try {
                 debugLog('[AcidWiki] 🚀 Initializing wiki...');
+                updateSiteBranding(); // Mise à jour dynamique de l'image de marque
 
                 // Try GitHub API first for production
                 let apiResult = await fetchWikiStructureFromAPI();

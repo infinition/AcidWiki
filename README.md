@@ -85,6 +85,16 @@ To customize your wiki, edit the **`acidwiki.json`** file at the root of your re
 
 > **Note:** The Project Name, Version, GitHub URL, and Footer Copyright are automatically detected from your repository context.
 
+## 🖼️ Branding & Logo
+
+The engine automatically detects your project logo and favicon using the following priority order:
+
+1.  **`wiki/assets/logo.png`**: If this file exists, it will be used as the primary logo and favicon.
+2.  **README.md**: If the above file is missing, the engine will use the **first image** found in your `README.md`.
+3.  **Fallback**: Otherwise, the default configuration logo is used.
+
+> **Tip:** For the best results, use a square transparent PNG.
+
 ## 📂 Folder Structure
 
 You must respect this structure for the auto-discovery engine to work:
