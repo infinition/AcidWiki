@@ -1,0 +1,155 @@
+/* Shared AcidWiki quality-of-life improvements. */
+body { isolation: isolate; }
+
+#home-bg-canvas {
+    position: fixed;
+    inset: 0;
+    z-index: -1;
+    width: 100vw;
+    height: 100vh;
+    pointer-events: none;
+    visibility: hidden;
+    opacity: 0;
+    background: #0f172a;
+    transition: opacity 300ms ease, visibility 300ms ease;
+}
+
+.nav-list { overflow: visible; }
+.nav-list.expanded { max-height: none !important; overflow: visible !important; }
+.nav-list.collapsed { max-height: 0 !important; overflow: hidden !important; }
+
+.section-header {
+    padding-top: 4px !important;
+    padding-bottom: 4px !important;
+    text-align: left !important;
+}
+
+.section-header > span {
+    flex: 1 1 auto;
+    min-width: 0;
+    font-size: 12.5px !important;
+    font-weight: 600;
+    line-height: 1.35 !important;
+    letter-spacing: 0.005em !important;
+    text-align: left !important;
+    text-transform: none !important;
+    overflow-wrap: anywhere;
+}
+
+.section-header > span > svg,
+.section-header > .section-arrow {
+    width: 0.75rem !important;
+    height: 0.75rem !important;
+    min-width: 0.75rem !important;
+    min-height: 0.75rem !important;
+    flex: 0 0 0.75rem !important;
+}
+
+.nav-list .nav-list,
+.nav-group .nav-list {
+    margin-left: 9px;
+    padding-left: 9px;
+    border-left: 1px solid var(--border-color, rgba(255, 255, 255, 0.09));
+}
+
+.nav-link {
+    font-size: 12.5px !important;
+    line-height: 1.35 !important;
+    padding-top: 3px !important;
+    padding-bottom: 3px !important;
+}
+
+.kb-bottom-bar-cell { pointer-events: none !important; }
+.kb-bottom-bar-cell > * { pointer-events: auto; }
+
+#wiki-meta {
+    position: sticky;
+    top: 5.25rem;
+    z-index: 2;
+    display: flex;
+    flex-direction: column;
+    gap: 0.15rem;
+    min-height: 2.5rem;
+    padding: 0 0.25rem 0.75rem;
+    margin-bottom: 0.5rem;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 10px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-muted, #6b7280);
+}
+
+#wiki-meta > span { display: block !important; }
+#theme-toggle-desktop { display: none !important; }
+
+#sidebar-theme-btn {
+    position: relative;
+    z-index: 90;
+    display: inline-flex !important;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 auto;
+    margin-left: auto;
+}
+
+#sidebar-footer-line {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    width: 100%;
+}
+
+aside .sticky:has(#toc-container) {
+    top: 8.25rem !important;
+    max-height: calc(100vh - 10rem);
+    overflow-y: auto;
+    overflow-x: hidden;
+    padding-right: 2px;
+    scrollbar-width: none;
+}
+
+aside .sticky:has(#toc-container)::-webkit-scrollbar { display: none; }
+#toc-container { max-height: none; }
+#mobile-toc-sidebar { overflow-y: auto !important; }
+#mobile-toc-list { padding-bottom: 2.5rem; }
+
+.math-block { margin: 1.1rem 0; overflow-x: auto; }
+
+.markdown-body pre.mermaid {
+    display: flex !important;
+    justify-content: center;
+    width: 100%;
+    margin: 1.25rem auto !important;
+    padding: 0.5rem 0 !important;
+    overflow-x: auto;
+    text-align: center;
+    background: transparent !important;
+    border: none !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
+    backdrop-filter: none !important;
+}
+
+.markdown-body pre.mermaid svg {
+    display: block;
+    width: auto !important;
+    max-width: 100%;
+    height: auto;
+    margin-inline: auto;
+}
+
+@media (min-width: 1280px) {
+    #scroll-container > div {
+        max-width: none !important;
+        padding-left: 2.75rem !important;
+        padding-right: 1.75rem !important;
+        gap: 2.75rem !important;
+    }
+
+    #scroll-container > div > .content-transition-area { max-width: 74rem; }
+    #scroll-container > div > aside { margin-left: auto; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    #home-bg-canvas { transition: none; }
+}

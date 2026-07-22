@@ -21,6 +21,10 @@ The core logic lives in this repository. Client repositories reference AcidWiki 
 - Project name, copyright year, and GitHub links injected at build time.
 - Daily CRON update: checks for engine changes and self-patches.
 - Dark mode, responsive layout, smooth transitions.
+- Native Mermaid diagrams, centered on a fully transparent canvas.
+- Deep Math Academy theme with an animated particle background.
+- Natural folder sorting, stable folder icons, and Index/README-first breadcrumbs.
+- Scrollable, self-following table of contents for long chapters.
 
 ---
 
@@ -117,6 +121,7 @@ Use a square transparent PNG for best results.
 - Folders become menu categories, files become pages.
 - Prefix names with numbers to control order: `01_General`, `02_Advanced`.
 - Link images: `![](../assets/image.png)`.
+- Add Mermaid diagrams with a fenced `mermaid` code block.
 
 ---
 
@@ -135,7 +140,9 @@ The engine uses the GitHub API in production. Locally it falls back to a filesys
 python -m http.server 8000
 ```
 
-Open `http://localhost:8000`. Markdown files must be in `wiki/docs/`.
+Open `http://localhost:8000`. Markdown files inside `wiki/docs/` are discovered automatically. Root Markdown files can be listed in `CONFIG.localRootMarkdown` for a fully offline preview; production discovers them through the GitHub API.
+
+`AcidWiki-Feature-Test.md` is a ready-made visual test page for Mermaid, KaTeX, tables, code, the animated theme, and long tables of contents.
 
 ---
 

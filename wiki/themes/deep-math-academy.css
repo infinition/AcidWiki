@@ -1,0 +1,194 @@
+/* Deep Math Academy — animated indigo/cyan theme for AcidWiki. */
+:root {
+    --bg-body: transparent;
+    --bg-sidebar: rgba(30, 27, 75, 0.88);
+    --border-color: rgba(129, 140, 248, 0.28);
+    --text-main: #d1d5db;
+    --text-heading: #f3f4f6;
+    --accent-green: #818cf8;
+    --accent-dim: rgba(99, 102, 241, 0.18);
+    --code-bg: rgba(2, 6, 23, 0.90);
+}
+
+.dark { --accent-green: #818cf8; }
+html[data-theme="deep-math-academy"] { background: #0f172a; }
+html[data-theme="deep-math-academy"] #home-bg-canvas { visibility: visible; opacity: 1; }
+
+body.font-sans {
+    font-family: 'Fredoka', ui-rounded, system-ui, sans-serif !important;
+    background: transparent;
+}
+
+.font-mono, code, pre, kbd { font-family: 'JetBrains Mono', ui-monospace, monospace !important; }
+
+#sidebar,
+#mobile-toc-sidebar,
+body > header {
+    color: #eef2ff;
+    background: linear-gradient(180deg, #3730a3 0%, #312e81 52%, #1e1b4b 100%) !important;
+    border-color: rgba(165, 180, 252, 0.24) !important;
+}
+
+#sidebar .bg-hack-sidebar,
+#sidebar .bg-hack-bg\/30,
+#sidebar .bg-hack-bg\/50,
+#mobile-toc-sidebar .bg-hack-bg\/50 { background-color: rgba(30, 27, 75, 0.34) !important; }
+
+#sidebar-project-name,
+#mobile-project-name,
+#sidebar .text-hack-heading,
+#mobile-toc-sidebar .text-hack-heading { color: #fff !important; }
+
+#sidebar .text-gray-500,
+#sidebar .text-gray-400,
+#mobile-toc-sidebar .text-gray-500,
+#mobile-toc-sidebar .text-gray-400 { color: #c7d2fe !important; }
+
+#sidebar .text-hack-green,
+#mobile-toc-sidebar .text-hack-green { color: #67e8f9 !important; }
+
+#sidebar .border-hack-border,
+#mobile-toc-sidebar .border-hack-border { border-color: rgba(165, 180, 252, 0.24) !important; }
+
+#sidebar .nav-link,
+#sidebar .section-header {
+    border-radius: 0.6rem;
+    transition: background-color 160ms ease, color 160ms ease, transform 160ms ease;
+}
+
+#sidebar .nav-link:hover,
+#sidebar .section-header:hover {
+    color: #fff !important;
+    background: rgba(255, 255, 255, 0.10) !important;
+    transform: translateX(2px);
+}
+
+#sidebar .nav-link.active {
+    color: #fff !important;
+    background: linear-gradient(90deg, rgba(6, 182, 212, 0.26), rgba(129, 140, 248, 0.20)) !important;
+    box-shadow: inset 3px 0 #67e8f9;
+}
+
+#sidebar .nav-link.active > span:first-child,
+#sidebar .nav-link:hover > span:first-child { background-color: #67e8f9 !important; }
+
+#sidebar-logo,
+#mobile-logo { filter: drop-shadow(0 5px 10px rgba(15, 23, 42, 0.30)); }
+
+#scroll-container { background: transparent !important; }
+
+.breadcrumb-sticky-container.stuck .breadcrumb-inner {
+    background: rgba(15, 23, 42, 0.84) !important;
+    border: 1px solid rgba(129, 140, 248, 0.28) !important;
+    box-shadow: 0 10px 30px rgba(2, 6, 23, 0.30);
+    backdrop-filter: blur(14px);
+}
+
+#breadcrumbs,
+#wiki-meta { color: #94a3b8 !important; }
+
+#breadcrumbs .text-hack-green,
+#last-updated { color: #a5b4fc !important; }
+
+.markdown-body { color: #d1d5db; font-size: 1.02rem; }
+
+.markdown-body h1,
+.markdown-body h2,
+.markdown-body h3,
+.markdown-body h4 {
+    color: #f3f4f6;
+    letter-spacing: -0.018em;
+}
+
+.markdown-body h1 { border-bottom-color: rgba(129, 140, 248, 0.28); }
+
+.markdown-body h2::before {
+    content: '';
+    width: 0.32rem;
+    height: 1.35rem;
+    margin-right: 0.65rem;
+    border-radius: 999px;
+    background: linear-gradient(180deg, #06b6d4, #6366f1, #ec4899);
+    flex: 0 0 auto;
+}
+
+.markdown-body a,
+.markdown-body :not(pre) > code,
+.anchor-link { color: #a5b4fc; }
+
+.markdown-body :not(pre) > code {
+    background: rgba(49, 46, 129, 0.52);
+    border-color: rgba(129, 140, 248, 0.36);
+}
+
+.markdown-body blockquote {
+    color: #e0e7ff;
+    background: linear-gradient(135deg, rgba(49, 46, 129, 0.70), rgba(8, 47, 73, 0.60)) !important;
+    border-color: #818cf8 !important;
+    box-shadow: 0 8px 24px rgba(2, 6, 23, 0.22);
+    backdrop-filter: blur(10px);
+}
+
+.markdown-body table {
+    overflow: hidden;
+    border-radius: 0.65rem;
+    background: rgba(15, 23, 42, 0.72);
+    box-shadow: 0 8px 24px rgba(2, 6, 23, 0.24);
+    backdrop-filter: blur(10px);
+}
+
+.markdown-body table th { color: #e0e7ff; background: rgba(49, 46, 129, 0.72); }
+.markdown-body table th,
+.markdown-body table td { border-color: rgba(129, 140, 248, 0.28); }
+
+.markdown-body pre:not(.mermaid) {
+    border-color: #312e81;
+    box-shadow: 0 10px 26px rgba(15, 23, 42, 0.14);
+}
+
+.markdown-body pre.mermaid {
+    background: transparent !important;
+    border: 0 !important;
+    box-shadow: none !important;
+}
+
+.markdown-body img {
+    border: 1px solid rgba(129, 140, 248, 0.28);
+    box-shadow: 0 10px 30px rgba(2, 6, 23, 0.30);
+}
+
+#label-on-this-page,
+#label-mobile-toc,
+#sidebar-theme-btn,
+#toc-btn-desktop,
+#clear-highlight-btn,
+.kb-bottom-bar-btn {
+    color: #c7d2fe !important;
+    background: rgba(30, 27, 75, 0.86) !important;
+    border-color: rgba(129, 140, 248, 0.34) !important;
+}
+
+#toc-container .toc-link { color: #94a3b8; border-color: transparent !important; }
+#toc-container .toc-link:hover,
+#toc-container .toc-link.active { color: #c7d2fe !important; }
+
+.pagination-card,
+#search-modal {
+    background: rgba(15, 23, 42, 0.94) !important;
+    border-color: rgba(129, 140, 248, 0.34) !important;
+    box-shadow: 0 14px 38px rgba(2, 6, 23, 0.42);
+    backdrop-filter: blur(16px);
+}
+
+#search-modal input,
+#search-modal .text-hack-heading { color: #f3f4f6 !important; }
+
+.search-result-item:hover,
+.search-result-item.active {
+    background: rgba(49, 46, 129, 0.66) !important;
+    border-color: #818cf8 !important;
+}
+
+#reading-progress-bar { background: linear-gradient(90deg, #06b6d4, #6366f1, #ec4899); }
+
+@media (max-width: 767px) { body.font-sans { background: transparent; } }

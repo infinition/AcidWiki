@@ -24,9 +24,9 @@
     <meta property="twitter:description" id="tw-desc" content="Official Documentation and Wiki">
     <meta property="twitter:image" id="tw-image" content="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==">
 
-    <link rel="icon" id="favicon-32" type="image/png" sizes="32x32" href="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==">
-    <link rel="icon" id="favicon-16" type="image/png" sizes="16x16" href="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==">
-    <link rel="apple-touch-icon" id="apple-icon" sizes="180x180" href="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==">
+    <link rel="icon" id="favicon-32" type="image/png" sizes="32x32" href="wiki/assets/logo.png">
+    <link rel="icon" id="favicon-16" type="image/png" sizes="16x16" href="wiki/assets/logo.png">
+    <link rel="apple-touch-icon" id="apple-icon" sizes="180x180" href="wiki/assets/logo.png">
     <link rel="mask-icon" id="mask-icon" href="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==" color="#22c55e">
     <meta name="apple-mobile-web-app-title" id="apple-title" content="Wiki">
     <meta name="application-name" id="app-name" content="Wiki">
@@ -51,13 +51,17 @@
         href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-dark.min.css">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
 
+    <script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
+
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.css">
     <script src="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/contrib/auto-render.min.js"></script>
 
     <link
-        href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Inter:wght@400;500;600&display=swap"
+        href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&family=Inter:wght@400;500;600&display=swap"
         rel="stylesheet">
+
+    <link rel="stylesheet" href="wiki/enhancements.css">
 
     <style>
         /* --- THEME ENGINE (CSS Variables) --- */
@@ -1274,9 +1278,13 @@
             wikiId: '',
             contentCache: {},
             searchIndex: [],
+            searchIndexReady: false,
+            searchIndexPromise: null,
+            searchIndexProgress: { completed: 0, total: 0 },
             expandedSections: new Set(),
             repo: "infinition/AcidWiki", // Fallback
             branch: "main",
+            cacheVersion: "dev",
             currentTitle: "",
             currentFolder: "",
             currentFilename: ""
@@ -1285,6 +1293,7 @@
         if (typeof CONFIG !== 'undefined') {
             STATE.repo = CONFIG.repo;
             STATE.branch = CONFIG.branch;
+            STATE.cacheVersion = [CONFIG.branch, CONFIG.versioning?.manualVersion, CONFIG.versioning?.manualDate].filter(Boolean).join('|') || 'dev';
             // Identifiant unique par repo pour éviter conflits de cache localStorage entre différentes GitHub Pages
             // Utilise un token aléatoire persistant (ex: README_53r9ce.md) plutôt qu'un hash fixe.
             const shortHash = (str) => {
@@ -1524,6 +1533,7 @@
             const themeLink = document.getElementById('theme-link');
 
             themeLink.href = theme.file;
+            html.dataset.theme = theme.id;
 
             if (theme.isDark) {
                 html.classList.add('dark');
@@ -1689,23 +1699,43 @@
         }
 
         // --- 4. WIKI CORE ---
+        const naturalCollator = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' });
+
+        function sortWikiStructure(obj) {
+            const sorted = {};
+            Object.entries(obj).sort(([keyA, valueA], [keyB, valueB]) => {
+                const aFolder = typeof valueA === 'object' && valueA !== null;
+                const bFolder = typeof valueB === 'object' && valueB !== null;
+                if (aFolder !== bFolder) return aFolder ? -1 : 1;
+                return naturalCollator.compare(keyA, keyB);
+            }).forEach(([key, value]) => {
+                sorted[key] = typeof value === 'object' && value !== null ? sortWikiStructure(value) : value;
+            });
+            return sorted;
+        }
+
         async function initWiki() {
             try {
                 debugLog('[AcidWiki] 🚀 Initializing wiki...');
                 updateSiteBranding(); // Mise à jour dynamique de l'image de marque
 
-                // Try GitHub API first for production
-                let apiResult = await fetchWikiStructureFromAPI();
-                let structure = apiResult && (apiResult.structure ?? apiResult);
-                const rootMdFiles = (apiResult && apiResult.rootMdFiles) || [];
+                const isLocalPreview = /^(localhost|127\.0\.0\.1|\[::1\])$/.test(window.location.hostname);
+                let discoveryResult = isLocalPreview
+                    ? await scanLocalFilesystem()
+                    : await fetchWikiStructureFromAPI();
 
-                // If API fails, try local filesystem scanning (for local HTTP servers)
-                if (!structure && typeof structure !== 'object') {
-                    debugLog('[AcidWiki] 🔄 Trying local filesystem scan...');
-                    structure = await scanLocalFilesystem();
+                if (!discoveryResult) {
+                    debugLog('[AcidWiki] 🔄 Trying alternate content discovery...');
+                    discoveryResult = isLocalPreview
+                        ? await fetchWikiStructureFromAPI()
+                        : await scanLocalFilesystem();
                 }
+
+                let structure = discoveryResult && (discoveryResult.structure ?? discoveryResult);
+                const rootMdFiles = (discoveryResult && discoveryResult.rootMdFiles) || [];
+
                 if (structure && typeof structure === 'object' && !Array.isArray(structure)) {
-                    // When from scanLocalFilesystem we don't have rootMdFiles; keep []
+                    structure = sortWikiStructure(structure);
                 } else {
                     structure = null;
                 }
@@ -1734,7 +1764,9 @@
                 debugLog('[AcidWiki] ✅ Wiki structure loaded successfully');
 
                 renderSidebar();
-                buildSearchIndex();
+                STATE.searchIndexPromise = buildSearchIndex().catch(error => {
+                    console.error('[AcidWiki] Search indexing failed:', error);
+                });
 
                 window.onpopstate = (event) => {
                     if (event.state) {
@@ -1807,24 +1839,11 @@
                     rootMdFiles.sort((a, b) => {
                         if (a.filename.toLowerCase() === 'readme.md') return -1;
                         if (b.filename.toLowerCase() === 'readme.md') return 1;
-                        return a.filename.localeCompare(b.filename);
+                        return naturalCollator.compare(a.filename, b.filename);
                     });
                     if (rootMdFiles.length) debugLog(`[AcidWiki] 📂 Root .md files: ${rootMdFiles.map(f => f.filename).join(', ')}`);
 
-                    // Sort folders and files recursively
-                    function sortStructure(obj) {
-                        const sorted = {};
-                        Object.keys(obj).sort().forEach(key => {
-                            if (typeof obj[key] === 'object' && obj[key] !== null) {
-                                sorted[key] = sortStructure(obj[key]);
-                            } else {
-                                sorted[key] = obj[key];
-                            }
-                        });
-                        return sorted;
-                    }
-
-                    const sortedStructure = sortStructure(structure);
+                    const sortedStructure = sortWikiStructure(structure);
                     debugLog(`[AcidWiki] ✅ GitHub discovery complete: Found ${fileCount} files`);
                     const hasStructure = Object.keys(sortedStructure).length > 0;
                     const hasRoot = rootMdFiles.length > 0;
@@ -1970,26 +1989,54 @@
                     if (Object.keys(structure[root]).length === 0) delete structure[root];
                 }
 
-                // Sort folders and files recursively
-                function sortStructure(obj) {
-                    const sorted = {};
-                    Object.keys(obj).sort().forEach(key => {
-                        if (typeof obj[key] === 'object' && !obj[key].endsWith) {
-                            sorted[key] = sortStructure(obj[key]);
-                        } else {
-                            sorted[key] = obj[key];
-                        }
-                    });
-                    return sorted;
+                const sortedStructure = sortWikiStructure(structure);
+                const rootMdFiles = [];
+                try {
+                    const rootRes = await fetch('./');
+                    if (rootRes.ok) {
+                        const rootDoc = new DOMParser().parseFromString(await rootRes.text(), 'text/html');
+                        rootDoc.querySelectorAll('a').forEach(link => {
+                            const rawHref = link.getAttribute('href');
+                            if (!rawHref || rawHref.startsWith('?') || rawHref.startsWith('#')) return;
+                            const cleanHref = rawHref.split(/[?#]/)[0].replace(/^\.\//, '');
+                            if (cleanHref.includes('/') || !/\.md$/i.test(cleanHref)) return;
+                            const filename = decodeURIComponent(cleanHref);
+                            const title = filename.replace(/\.md$/i, '').replace(/_/g, ' ');
+                            if (!rootMdFiles.some(file => file.filename === filename)) rootMdFiles.push({ title, filename });
+                        });
+                    }
+                } catch (error) {
+                    debugLog('[AcidWiki] ⚠️ Root Markdown discovery unavailable:', error);
                 }
 
-                const sortedStructure = sortStructure(structure);
+                for (const filename of (CONFIG.localRootMarkdown || [])) {
+                    if (!/\.md$/i.test(filename) || rootMdFiles.some(file => file.filename === filename)) continue;
+                    try {
+                        const fileRes = await fetch(`./${encodeURI(filename)}`);
+                        if (!fileRes.ok) continue;
+                        const fileText = await fileRes.text();
+                        if (!fileText.trim() || isHtmlDocumentText(fileText)) continue;
+                        rootMdFiles.push({
+                            title: filename.replace(/\.md$/i, '').replace(/_/g, ' '),
+                            filename
+                        });
+                    } catch (_) { }
+                }
+
+                rootMdFiles.sort((a, b) => {
+                    if (a.filename.toLowerCase() === 'readme.md') return -1;
+                    if (b.filename.toLowerCase() === 'readme.md') return 1;
+                    return naturalCollator.compare(a.filename, b.filename);
+                });
 
                 const totalItems = JSON.stringify(sortedStructure).split('.md').length - 1;
                 debugLog(`[AcidWiki] ✅ Scan complete! Found ${totalItems} markdown files`);
                 debugLog('[AcidWiki] 📊 Structure:', sortedStructure);
 
-                return Object.keys(sortedStructure).length > 0 ? sortedStructure : null;
+                const hasStructure = Object.keys(sortedStructure).length > 0;
+                return (hasStructure || rootMdFiles.length > 0)
+                    ? { structure: hasStructure ? sortedStructure : {}, rootMdFiles }
+                    : null;
             } catch (e) {
                 console.error('[AcidWiki] ❌ Local filesystem scan failed:', e);
                 return null;
@@ -2055,107 +2102,107 @@
         }
 
         async function buildSearchIndex() {
-            const promises = [];
+            const jobs = [];
+            STATE.searchIndex = [];
+            STATE.searchIndexReady = false;
+            STATE.searchIndexProgress = { completed: 0, total: 0 };
+
+            const addSearchEntry = (folder, title, filename, text, extra = {}) => {
+                if (!text || !text.trim() || isHtmlDocumentText(text)) return;
+                STATE.searchIndex.push({
+                    folder,
+                    title,
+                    filename,
+                    content: text.toLowerCase(),
+                    titleLower: title.toLowerCase(),
+                    ...extra
+                });
+            };
 
             function indexRecursive(data, currentPath = '') {
                 for (const [key, value] of Object.entries(data)) {
                     if (key === '__root__') continue;
                     if (typeof value === 'object' && value !== null) {
-                        const folderPath = currentPath ? `${currentPath}/${key}` : key;
-                        indexRecursive(value, folderPath);
+                        indexRecursive(value, currentPath ? `${currentPath}/${key}` : key);
                     } else if (typeof value === 'string' && value.endsWith('.md')) {
                         const filename = value;
                         const title = key;
                         const folder = currentPath;
-
-                        promises.push(
-                            fetch(`./${folder}/${filename}`)
-                                .then(res => { if (!res.ok) return ''; return res.text(); })
-                                .then(text => {
-                                    if (!text) return;
-                                    STATE.searchIndex.push({
-                                        folder, title, filename,
-                                        content: text.toLowerCase(),
-                                        titleLower: title.toLowerCase()
-                                    });
-                                })
-                                .catch(err => debugLog("Indexing skip:", filename))
-                        );
+                        jobs.push(async () => {
+                            const res = await fetch(`./${folder}/${filename}`);
+                            if (!res.ok) return;
+                            addSearchEntry(folder, title, filename, await res.text());
+                        });
                     }
                 }
             }
 
             indexRecursive(STATE.wikiData);
 
-            // 2. --- INDEXING ROOT .MD FILES (Project Home) ---
             (STATE.rootMdFiles || []).forEach(({ title, filename }) => {
-                promises.push(
-                    Promise.resolve()
-                        .then(async () => {
-                            let text = '';
-                            const isGitHubPages = /\.github\.io$/i.test(window.location.hostname);
-
-                            // Prefer raw GitHub first for root .md to avoid noisy 404 on GitHub Pages.
-                            if (STATE.repo && STATE.branch) {
-                                try {
-                                    const rawUrl = `https://raw.githubusercontent.com/${STATE.repo}/${STATE.branch}/${filename}`;
-                                    const rawRes = await fetch(rawUrl);
-                                    if (rawRes.ok) {
-                                        const rawText = await rawRes.text();
-                                        if (rawText && !isHtmlDocumentText(rawText)) text = rawText;
-                                    }
-                                } catch (_) { }
-                            }
-
-                            // Fallback to local file (useful in local previews).
-                            if ((!text || !text.trim() || isHtmlDocumentText(text)) && !isGitHubPages) {
-                                try {
-                                    const res = await fetch(filename);
-                                    if (res.ok) {
-                                        const localText = await res.text();
-                                        if (localText && !isHtmlDocumentText(localText)) text = localText;
-                                    }
-                                } catch (_) { }
-                            }
-
-                            if (!text || !text.trim() || isHtmlDocumentText(text)) return;
-                            STATE.searchIndex.push({
-                                folder: '',
-                                title,
-                                filename,
-                                content: text.toLowerCase(),
-                                titleLower: title.toLowerCase()
-                            });
-                        })
-                        .catch(() => {})
-                );
+                jobs.push(async () => {
+                    let text = '';
+                    const isGitHubPages = /\.github\.io$/i.test(window.location.hostname);
+                    if (STATE.repo && STATE.branch) {
+                        try {
+                            const rawRes = await fetch(`https://raw.githubusercontent.com/${STATE.repo}/${STATE.branch}/${filename}`);
+                            if (rawRes.ok) text = await rawRes.text();
+                        } catch (_) { }
+                    }
+                    if ((!text || !text.trim() || isHtmlDocumentText(text)) && !isGitHubPages) {
+                        const localRes = await fetch(filename);
+                        if (localRes.ok) text = await localRes.text();
+                    }
+                    addSearchEntry('', title, filename, text);
+                });
             });
-            if (STATE.rootMdFiles && STATE.rootMdFiles.length) debugLog("[AcidWiki] 🔍 Root .md files indexed.");
 
-            // 3. --- CHANGELOG INDEXING (API) ---
-            if (CONFIG.features.showChangelog) {
-                promises.push(
-                    fetch(`https://api.github.com/repos/${STATE.repo}/releases`)
-                        .then(res => { if (!res.ok) return []; return res.json(); })
-                        .then(data => {
-                            if (!Array.isArray(data) || data.length === 0) return;
-                            const fullLog = data.map(r => `${r.tag_name} ${r.name || ''} ${r.body || ''}`).join(' ');
-
-                            STATE.searchIndex.push({
-                                folder: 'SYSTEM', 
-                                title: CONFIG.ui.changelogTitle,
-                                filename: 'CHANGELOG_SPECIAL_ID', 
-                                content: fullLog.toLowerCase(),
-                                titleLower: CONFIG.ui.changelogTitle.toLowerCase(),
-                                isVirtual: true
-                            });
-                            debugLog("[AcidWiki] 🔍 Changelog indexed.");
-                        })
-                        .catch(() => { })
-                );
+            if (CONFIG.features.showChangelog && STATE.repo) {
+                jobs.push(async () => {
+                    const res = await fetch(`https://api.github.com/repos/${STATE.repo}/releases`);
+                    if (!res.ok) return;
+                    const data = await res.json();
+                    if (!Array.isArray(data) || data.length === 0) return;
+                    addSearchEntry(
+                        'SYSTEM',
+                        CONFIG.ui.changelogTitle,
+                        'CHANGELOG_SPECIAL_ID',
+                        data.map(release => `${release.tag_name} ${release.name || ''} ${release.body || ''}`).join(' '),
+                        { isVirtual: true }
+                    );
+                });
             }
 
-            await Promise.all(promises);
+            STATE.searchIndexProgress.total = jobs.length;
+            let nextJob = 0;
+            const notifyProgress = () => document.dispatchEvent(new CustomEvent('acidwiki:search-index-progress', {
+                detail: { ...STATE.searchIndexProgress, ready: STATE.searchIndexReady }
+            }));
+
+            const worker = async () => {
+                while (nextJob < jobs.length) {
+                    const jobIndex = nextJob++;
+                    try {
+                        await jobs[jobIndex]();
+                    } catch (error) {
+                        debugLog('[AcidWiki] Indexing skip:', error);
+                    } finally {
+                        STATE.searchIndexProgress.completed += 1;
+                        if (STATE.searchIndexProgress.completed % 25 === 0 || STATE.searchIndexProgress.completed === jobs.length) {
+                            notifyProgress();
+                        }
+                    }
+                }
+            };
+
+            notifyProgress();
+            const configuredConcurrency = Number(CONFIG.features.searchIndexConcurrency) || 8;
+            const concurrency = Math.max(1, Math.min(16, configuredConcurrency, jobs.length || 1));
+            await Promise.all(Array.from({ length: concurrency }, () => worker()));
+            STATE.searchIndexReady = true;
+            notifyProgress();
+            debugLog(`[AcidWiki] Search index ready: ${STATE.searchIndex.length}/${jobs.length} documents.`);
+            return STATE.searchIndex;
         }
 
         function getFlatPageList() {
@@ -2187,6 +2234,23 @@
             loadContent(first.folder, first.title, first.file, true, first.folder === '');
         }
 
+        function getFolderLandingPage(folderData) {
+            if (!folderData || typeof folderData !== 'object') return null;
+            const pages = Object.entries(folderData).filter(([, value]) => typeof value === 'string');
+            if (!pages.length) return null;
+
+            const rank = ([title, filename]) => {
+                const label = `${title} ${filename}`.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+                if (/(^|\b)(index|readme)(\b|$)/.test(label)) return 0;
+                if (/^0+\s*[-_.]/.test(label)) return 1;
+                if (/glossaire|glossary/.test(label)) return 20;
+                return 10;
+            };
+
+            pages.sort((a, b) => rank(a) - rank(b) || naturalCollator.compare(a[0], b[0]));
+            return pages[0];
+        }
+
         function showErrorState(msg) {
             document.getElementById('nav-container').innerHTML = `
                 <div class="p-4 text-xs text-red-400 border border-red-900 bg-red-900/10 rounded m-2 font-mono">
@@ -2201,6 +2265,10 @@
         }
 
         // --- 5. CONTENT LOADER (PERSISTENT CACHE OPTIMIZED) ---
+        function getContentCacheKey(folder, filename) {
+            return [STATE.wikiId || 'wiki', STATE.cacheVersion || 'dev', folder || 'root', filename].join('|');
+        }
+
         async function loadContent(folder, title, filename, pushHistory = true, isRoot = false, highlightQuery = null) {
             if (CONFIG.features.pageTransitions && document.startViewTransition) {
                 document.startViewTransition(() => performLoadContent(folder, title, filename, pushHistory, isRoot, highlightQuery));
@@ -2245,9 +2313,9 @@
                 const partKey = folderParts[i];
                 currentPath = currentPath ? `${currentPath}/${partKey}` : partKey;
 
-                // Find first page in this specific folder level to make the folder clickable
+                // Prefer an Index/README page when a breadcrumb folder is clicked.
                 const folderData = currentPath.split('/').reduce((obj, key) => obj[key], STATE.wikiData);
-                const firstPage = Object.entries(folderData).find(([k, v]) => typeof v === 'string');
+                const firstPage = getFolderLandingPage(folderData);
 
                 if (firstPage) {
                     breadcrumbParts.push(`<span class="hover:text-hack-heading cursor-pointer" onclick="loadContent('${currentPath}', '${firstPage[0]}', '${firstPage[1]}')">${seg}</span>`);
@@ -2272,7 +2340,7 @@
             lucide.createIcons();
 
             // Only show loader if not in RAM cache
-            if (!STATE.contentCache[`${folder}/${filename}`]) {
+            if (!STATE.contentCache[getContentCacheKey(folder, filename)]) {
                 viewer.innerHTML = `
                     <div class="space-y-6 pt-4">
                         <div class="skeleton h-10 w-2/3 mb-8"></div>
@@ -2295,7 +2363,7 @@
 
             try {
                 let text;
-                const cacheKey = STATE.wikiId ? `${STATE.wikiId}|${folder}|${filename}` : `${folder}|${filename}`;
+                const cacheKey = getContentCacheKey(folder, filename);
                 const storageKey = `bjorn_content_${cacheKey.replace(/\//g, '_')}`;
                 const now = Date.now();
                 const TTL = 3600 * 1000 * 24; // 24 Hours Cache
@@ -2404,6 +2472,10 @@
                     ],
                     throwOnError: false
                 });
+
+                if (typeof window.renderMermaidDiagrams === 'function') {
+                    await window.renderMermaidDiagrams(viewer);
+                }
 
                 // Update SEO Tags
                 const fullTitle = `${title} | ${CONFIG.projectName}`;
@@ -2552,7 +2624,7 @@
                 if (!flatList[i]) return;
                 const item = flatList[i];
                 const isRoot = item.folder === '';
-                const cacheKey = STATE.wikiId ? `${STATE.wikiId}|${item.folder}|${item.file}` : `${item.folder}|${item.file}`;
+                const cacheKey = getContentCacheKey(item.folder, item.file);
                 const storageKey = `bjorn_content_${cacheKey.replace(/\//g, '_')}`;
                 if (localStorage.getItem(storageKey)) return;
                 (async () => {
@@ -2753,7 +2825,8 @@
         function updateTOCActiveState() {
             const scrollContainer = document.getElementById('scroll-container');
             const headings = Array.from(document.querySelectorAll('#markdown-viewer h1, #markdown-viewer h2, #markdown-viewer h3'));
-            const tocLinks = Array.from(document.querySelectorAll('.toc-link'));
+            const tocLinks = Array.from(document.querySelectorAll('#toc-container .toc-link'));
+            const allTocLinks = Array.from(document.querySelectorAll('.toc-link'));
             const path = document.getElementById('toc-path');
 
             if (!headings.length || !tocLinks.length || !path) return;
@@ -2784,11 +2857,11 @@
             const activeIds = new Set(activeHeadings.map(h => h.id));
             const activeLinks = [];
 
-            tocLinks.forEach(link => {
+            allTocLinks.forEach(link => {
                 const id = link.getAttribute('href').substring(1);
                 if (activeIds.has(id)) {
                     link.classList.add('active');
-                    activeLinks.push(link);
+                    if (link.closest('#toc-container')) activeLinks.push(link);
                 } else {
                     link.classList.remove('active');
                 }
@@ -2953,6 +3026,9 @@
                 searchModalOverlay.classList.remove('opacity-0');
                 searchModal.classList.remove('hidden');
                 modalSearchInput.focus();
+                if (!STATE.searchIndexReady && !modalSearchInput.value.trim()) {
+                    searchCount.innerText = getSearchIndexStatus();
+                }
             }, 10);
         }
 
@@ -2967,15 +3043,23 @@
             }, 300);
         }
 
-        modalSearchInput.addEventListener('input', (e) => {
-            const q = e.target.value.toLowerCase().trim();
+        function getSearchIndexStatus() {
+            const { completed, total } = STATE.searchIndexProgress;
+            const label = CONFIG.ui.indexingSearchText || 'Indexing documents';
+            return STATE.searchIndexReady ? '' : `${label} ${completed}/${total}`;
+        }
+
+        function runSearchQuery(rawQuery) {
+            const q = rawQuery.toLowerCase().trim();
             if (!q) {
                 modalSearchResults.innerHTML = '<div class="text-center py-10 text-gray-500 text-sm">Type to start searching...</div>';
-                searchCount.innerText = '';
+                searchCount.innerText = getSearchIndexStatus();
                 return;
             }
 
             const results = [];
+            const escapedQuery = q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            const highlightPattern = new RegExp(escapedQuery, 'gi');
             STATE.searchIndex.forEach(item => {
                 const titleMatch = item.titleLower.indexOf(q);
                 const contentMatch = item.content.indexOf(q);
@@ -2993,7 +3077,7 @@
 
                         // Sanitize first to prevent XSS, then highlight
                         const safeSnippet = DOMPurify.sanitize(rawSnippet);
-                        snippet = safeSnippet.replace(new RegExp(q, 'gi'), (m) => `<mark class="bg-hack-green/30 text-hack-green rounded px-0.5">${m}</mark>`);
+                        snippet = safeSnippet.replace(highlightPattern, (m) => `<mark class="bg-hack-green/30 text-hack-green rounded px-0.5">${m}</mark>`);
 
                         if (start > 0) snippet = "..." + snippet;
                         if (end < item.content.length) snippet = snippet + "...";
@@ -3004,17 +3088,31 @@
             });
 
             results.sort((a, b) => b.score - a.score);
-            renderSearchResults(results.slice(0, 10)); // Top 10
+            renderSearchResults(results.slice(0, 10), results.length); // Top 10
+        }
+
+        modalSearchInput.addEventListener('input', (e) => runSearchQuery(e.target.value));
+
+        document.addEventListener('acidwiki:search-index-progress', () => {
+            if (searchModalOverlay.classList.contains('hidden')) return;
+            runSearchQuery(modalSearchInput.value);
         });
 
-        function renderSearchResults(results) {
+        function renderSearchResults(results, totalMatches = results.length) {
             if (results.length === 0) {
-                modalSearchResults.innerHTML = '<div class="text-center py-10 text-red-400/60 text-sm italic">No results found for your query.</div>';
-                searchCount.innerText = '0 results';
+                if (!STATE.searchIndexReady) {
+                    const status = getSearchIndexStatus();
+                    modalSearchResults.innerHTML = `<div class="text-center py-10 text-gray-500 text-sm">${status}</div>`;
+                    searchCount.innerText = status;
+                } else {
+                    modalSearchResults.innerHTML = '<div class="text-center py-10 text-red-400/60 text-sm italic">No results found for your query.</div>';
+                    searchCount.innerText = '0 results';
+                }
                 return;
             }
 
-            searchCount.innerText = `${results.length} results`;
+            const status = getSearchIndexStatus();
+            searchCount.innerText = `${totalMatches} results${status ? ` · ${status}` : ''}`;
             modalSearchResults.innerHTML = results.map((res, i) => `
                 <div class="search-result-item p-3 rounded-xl cursor-pointer flex flex-col gap-1" onclick="selectSearchResult(${i})" data-index="${i}">
                     <div class="flex items-center justify-between">
@@ -3441,6 +3539,8 @@
             });
         };
     </script>
+    <script src="wiki/enhancements.js"></script>
+    <script src="wiki/deep-math-background.js"></script>
 </body>
 
 </html>

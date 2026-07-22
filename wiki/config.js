@@ -23,6 +23,7 @@ const CONFIG = {
     // Theme Settings
     themes: [
         { id: "dark", name: "Dark Mode", file: "wiki/themes/dark.css", isDark: true },
+        { id: "deep-math-academy", name: "Deep Math Academy", file: "wiki/themes/deep-math-academy.css", isDark: true },
         { id: "dim", name: "Dim Mode", file: "wiki/themes/light.css", isDark: true },
         { id: "electric-blue", name: "Electric Blue", file: "wiki/themes/electric-blue.css", isDark: true },
         { id: "cyberpunk", name: "Cyberpunk", file: "wiki/themes/cyberpunk.css", isDark: true },
@@ -42,6 +43,10 @@ const CONFIG = {
     ],
     defaultTheme: "dark",
 
+    // Root Markdown files to expose during a local static-server preview.
+    // GitHub Pages discovers root files automatically through the repository API.
+    localRootMarkdown: ["README.md", "AcidWiki-Feature-Test.md"],
+
     // Feature Toggles
     features: {
         showChangelog: true,
@@ -52,6 +57,8 @@ const CONFIG = {
         autoCollapseSidebar: false,
         stickyBreadcrumbs: true,
         showRootReadme: true,
+        searchIndexConcurrency: 8,
+        allowIframes: false,
         debug: true
     },
 
@@ -79,13 +86,14 @@ const CONFIG = {
         fetchingReleasesText: "Fetching GitHub releases...",
         checkingVersionText: "checking...",
         initializingText: "Initializing...",
+        indexingSearchText: "Indexing documents",
         themeChangedText: "Theme changed to: ",
         menuText: "Menu",
         onThisPageMobile: "On this page"
     },
 
     // Logo Settings
-    logoPath: ".github/assets/logo.png",
+    logoPath: "wiki/assets/logo.png",
     logoPlaceholder: "https://placehold.co/40x40/111214/22c55e?text=A",
 
     // PWA & SEO Settings
