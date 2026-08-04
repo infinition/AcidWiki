@@ -1626,9 +1626,14 @@
 
             if (CONFIG.social.github) {
                 const repoPath = CONFIG.social.github.replace('https://github.com/', '');
+                // Native stars endpoint rather than badge/dynamic/json pointed at
+                // api.github.com: that route makes shields.io call the GitHub API
+                // unauthenticated, so it hits the 60 requests per hour limit and renders
+                // "INVALID" roughly every other load. The native route uses shields.io's
+                // own authenticated GitHub connector and stays stable.
                 container.innerHTML += `
                     <a href="${CONFIG.social.github}" target="_blank" rel="noopener noreferrer" class="hover:opacity-80 transition-opacity block">
-                        <img src="https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fapi.github.com%2Frepos%2F${repoPath}&query=%24.stargazers_count&style=for-the-badge&logo=github&color=0B0C0E&labelColor=2A2E35&label=${CONFIG.badges.githubLabel}&logoColor=white"
+                        <img src="https://img.shields.io/github/stars/${repoPath}?style=for-the-badge&logo=github&color=0B0C0E&labelColor=2A2E35&label=${CONFIG.badges.githubLabel}&logoColor=white"
                             alt="GitHub" class="w-full badge-sm" />
                     </a>`;
             }
