@@ -73,10 +73,15 @@
         button.className = 'text-gray-500 hover:text-hack-green transition-colors bg-hack-sidebar border border-hack-border rounded p-1.5';
         button.title = 'Switch Theme';
         button.setAttribute('aria-label', 'Switch Theme');
+        button.setAttribute('aria-haspopup', 'true');
+        button.setAttribute('aria-expanded', 'false');
         button.innerHTML = '<i data-lucide="palette" class="w-4 h-4"></i>';
         button.addEventListener('click', event => {
             event.stopPropagation();
-            if (typeof window.cycleTheme === 'function') window.cycleTheme();
+            // This is the only theme trigger visible on desktop, so it must open the
+            // picker. cycleTheme is kept as a fallback for an older engine build.
+            if (typeof window.toggleThemeMenu === 'function') window.toggleThemeMenu(button);
+            else if (typeof window.cycleTheme === 'function') window.cycleTheme();
         });
 
         line.append(text, button);
