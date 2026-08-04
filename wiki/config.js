@@ -27,6 +27,7 @@ const CONFIG = {
         { id: "dim", name: "Dim Mode", file: "wiki/themes/light.css", isDark: true },
         { id: "electric-blue", name: "Electric Blue", file: "wiki/themes/electric-blue.css", isDark: true },
         { id: "cyberpunk", name: "Cyberpunk", file: "wiki/themes/cyberpunk.css", isDark: true },
+        { id: "dow", name: "Dow", file: "wiki/themes/dow.css", isDark: true },
         { id: "forest", name: "Forest", file: "wiki/themes/forest.css", isDark: true },
         { id: "monochrome", name: "Monochrome", file: "wiki/themes/monochrome.css", isDark: true },
         { id: "retro-hackers", name: "Retro Hackers", file: "wiki/themes/retro-hackers.css", isDark: true },
@@ -41,6 +42,9 @@ const CONFIG = {
         { id: "nature", name: "Nature", file: "wiki/themes/nature.css", isDark: false },
         { id: "glassmorphism", name: "Glassmorphism", file: "wiki/themes/glassmorphism.css", isDark: true }
     ],
+    // Ecrase par la cle "theme" de .github/acidwiki.json quand le repo en definit une.
+    // Sert uniquement de premiere visite : le choix du visiteur est ensuite memorise
+    // par repo dans localStorage.
     defaultTheme: "dark",
 
     // Root Markdown files to expose during a local static-server preview.

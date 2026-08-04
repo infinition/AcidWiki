@@ -124,6 +124,7 @@ jobs:
           REDDIT=$(jq -r '.social.reddit // empty' "$JSON_FILE" 2>/dev/null || echo "")
           COFFEE=$(jq -r '.buymeacoffee // empty' "$JSON_FILE" 2>/dev/null || echo "")
           DEBUG_MODE=$(jq -r '.debug // "false"' "$JSON_FILE" 2>/dev/null || echo "false")
+          THEME=$(jq -r '.theme // empty' "$JSON_FILE" 2>/dev/null || echo "")
           
           # --- INJECTION ---
           sed -i "s|projectName: \".*\"|projectName: \"${REPO_NAME^^}\"|g" $CONFIG_FILE
@@ -134,6 +135,18 @@ jobs:
           sed -i "s|github: \".*\"|github: \"https://github.com/$REPO_FULL\"|g" $CONFIG_FILE
           sed -i "s|githubLabel: \".*\"|githubLabel: \"${REPO_NAME^^}\"|g" $CONFIG_FILE
           sed -i "s|debug: false|debug: $DEBUG_MODE|g" $CONFIG_FILE
+
+          # Theme par defaut du repo. On refuse silencieusement un id inconnu plutot
+          # que de livrer un wiki sans feuille de style : le moteur retomberait sur
+          # CONFIG.themes[0], ce qui masquerait la faute de frappe.
+          if [ -n "$THEME" ]; then
+            if grep -q "id: \"$THEME\"" $CONFIG_FILE; then
+              echo "🎨 Theme par defaut du repo : $THEME"
+              sed -i "s|defaultTheme: \".*\"|defaultTheme: \"$THEME\"|g" $CONFIG_FILE
+            else
+              echo "::warning::Theme \"$THEME\" inconnu dans acidwiki.json, theme par defaut conserve."
+            fi
+          fi
           
           # Gestion parfaite des variables nulles
           if [ -n "$DISCORD" ] && [ "$DISCORD" != "null" ]; then sed -i "s|discord: .*|discord: \"$DISCORD\",|g" $CONFIG_FILE; else sed -i "s|discord: .*|discord: null,|g" $CONFIG_FILE; fi

@@ -916,6 +916,122 @@
                 z-index: 55;
             }
         }
+
+        /* ==========================================================================
+           THEME PICKER
+           Fixed positioning on purpose: the trigger buttons carry overflow:hidden for
+           their ripple effect, so a nested dropdown would be clipped. Placement is
+           computed in JS and clamped to the viewport, which keeps it on screen on both
+           desktop and mobile without a second breakpoint-specific layout.
+           ========================================================================== */
+        #theme-menu {
+            position: fixed;
+            z-index: 120;
+            display: flex;
+            flex-direction: column;
+            min-width: 13rem;
+            max-width: calc(100vw - 1rem);
+            background: var(--bg-sidebar, #111214);
+            border: 1px solid var(--border-color, #2A2E35);
+            border-radius: 0.5rem;
+            box-shadow: 0 18px 40px rgba(0, 0, 0, 0.55);
+            opacity: 0;
+            visibility: hidden;
+            transform: translateY(-0.35rem);
+            transition: opacity 0.15s ease, transform 0.15s ease, visibility 0.15s;
+        }
+
+        #theme-menu.open {
+            opacity: 1;
+            visibility: visible;
+            transform: translateY(0);
+        }
+
+        #theme-menu-title {
+            flex: none;
+            padding: 0.6rem 0.85rem 0.5rem;
+            border-bottom: 1px solid var(--border-color, #2A2E35);
+            color: var(--text-main, #A0AAB8);
+            font-size: 0.625rem;
+            font-weight: 700;
+            letter-spacing: 0.12em;
+            text-transform: uppercase;
+            opacity: 0.75;
+        }
+
+        #theme-menu-list {
+            overflow-y: auto;
+            overscroll-behavior: contain;
+            padding: 0.3rem;
+            scrollbar-width: thin;
+            scrollbar-color: var(--accent-green, #22c55e) transparent;
+        }
+
+        #theme-menu-list::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        #theme-menu-list::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        #theme-menu-list::-webkit-scrollbar-thumb {
+            background: var(--border-color, #2A2E35);
+            border-radius: 4px;
+        }
+
+        #theme-menu-list::-webkit-scrollbar-thumb:hover {
+            background: var(--accent-green, #22c55e);
+        }
+
+        .theme-option {
+            display: flex;
+            align-items: center;
+            gap: 0.6rem;
+            width: 100%;
+            padding: 0.5rem 0.6rem;
+            border-radius: 0.35rem;
+            background: none;
+            border: none;
+            color: var(--text-main, #A0AAB8);
+            font-family: inherit;
+            font-size: 0.8125rem;
+            text-align: left;
+            cursor: pointer;
+            transition: background 0.12s ease, color 0.12s ease;
+        }
+
+        .theme-option:hover,
+        .theme-option:focus-visible {
+            background: var(--accent-dim, rgba(34, 197, 94, 0.1));
+            color: var(--text-heading, #E2E8F0);
+            outline: none;
+        }
+
+        .theme-option[aria-checked="true"] {
+            color: var(--accent-green, #22c55e);
+            font-weight: 600;
+        }
+
+        /* Light or dark marker. Deliberately not a colour swatch: the accent colour
+           lives inside each theme stylesheet, which is only loaded once selected. */
+        .theme-option-kind {
+            flex: none;
+            display: inline-flex;
+            width: 1rem;
+            height: 1rem;
+            opacity: 0.7;
+        }
+
+        .theme-option-check {
+            margin-left: auto;
+            flex: none;
+            opacity: 0;
+        }
+
+        .theme-option[aria-checked="true"] .theme-option-check {
+            opacity: 1;
+        }
     </style>
 
     <script>
@@ -955,6 +1071,11 @@
         onclick="closeLightbox()">
         <img id="lightbox-img" src="" alt="Full view"
             class="rounded-lg border border-hack-border transform scale-95 transition-transform duration-300">
+    </div>
+
+    <div id="theme-menu" role="menu" aria-labelledby="theme-menu-title" aria-hidden="true">
+        <div id="theme-menu-title">Theme</div>
+        <div id="theme-menu-list"></div>
     </div>
 
     <header
@@ -1522,9 +1643,32 @@
         }
 
         // --- 2. THEME ENGINE ---
+        // Every wiki of a given user is served from the same github.io origin, so a
+        // single "theme-id" key would leak the choice made on one project into all the
+        // others and quietly override each repository's own default. Scope it.
+        function themeStorageKey() {
+            return 'theme-id:' + (CONFIG.repo || 'default');
+        }
+
+        function getStoredThemeId() {
+            try {
+                const scoped = localStorage.getItem(themeStorageKey());
+                if (scoped) return scoped;
+                // One-time migration from the legacy shared key.
+                const legacy = localStorage.getItem('theme-id');
+                if (legacy) {
+                    localStorage.removeItem('theme-id');
+                    if (CONFIG.themes.some(t => t.id === legacy)) {
+                        localStorage.setItem(themeStorageKey(), legacy);
+                        return legacy;
+                    }
+                }
+            } catch (_) {}
+            return null;
+        }
+
         function initTheme() {
-            const savedThemeId = localStorage.getItem('theme-id') || CONFIG.defaultTheme;
-            applyTheme(savedThemeId);
+            applyTheme(getStoredThemeId() || CONFIG.defaultTheme);
         }
 
         function applyTheme(themeId) {
@@ -1543,7 +1687,7 @@
                 html.classList.remove('dark');
             }
 
-            localStorage.setItem('theme-id', theme.id);
+            try { localStorage.setItem(themeStorageKey(), theme.id); } catch (_) {}
             lucide.createIcons();
 
             // Notify user (except on initial load)
@@ -1552,17 +1696,160 @@
             }
         }
 
-        function cycleTheme() {
-            const currentThemeId = localStorage.getItem('theme-id') || CONFIG.defaultTheme;
-            const currentIndex = CONFIG.themes.findIndex(t => t.id === currentThemeId);
-            const nextIndex = (currentIndex + 1) % CONFIG.themes.length;
-            const nextTheme = CONFIG.themes[nextIndex];
+        // --- THEME PICKER ---
+        // Cycling through the list stopped scaling once themes piled up, so the palette
+        // button opens a scrollable menu instead.
+        const themeMenu = document.getElementById('theme-menu');
+        const themeMenuList = document.getElementById('theme-menu-list');
+        let themeMenuAnchor = null;
 
-            applyTheme(nextTheme.id);
+        function buildThemeMenu() {
+            const current = getStoredThemeId() || CONFIG.defaultTheme;
+            themeMenuList.innerHTML = '';
+
+            CONFIG.themes.forEach(theme => {
+                const option = document.createElement('button');
+                option.type = 'button';
+                option.className = 'theme-option';
+                option.setAttribute('role', 'menuitemradio');
+                option.setAttribute('aria-checked', String(theme.id === current));
+                option.dataset.themeId = theme.id;
+                option.innerHTML = `
+                    <span class="theme-option-kind"><i data-lucide="${theme.isDark ? 'moon' : 'sun'}" class="w-4 h-4"></i></span>
+                    <span class="theme-option-name"></span>
+                    <span class="theme-option-check"><i data-lucide="check" class="w-4 h-4"></i></span>`;
+                option.querySelector('.theme-option-name').textContent = theme.name;
+                option.onclick = () => {
+                    applyTheme(theme.id);
+                    closeThemeMenu(true);
+                };
+                themeMenuList.appendChild(option);
+            });
+
+            lucide.createIcons();
         }
 
-        document.getElementById('theme-toggle-desktop').onclick = cycleTheme;
-        document.getElementById('theme-toggle-mobile').onclick = cycleTheme;
+        // Anchor the menu to the button, then clamp it inside the viewport. Opens
+        // upwards when the space below is too tight, which is the usual case for the
+        // mobile header button on a short screen.
+        function positionThemeMenu(anchor) {
+            const margin = 8;
+            const rect = anchor.getBoundingClientRect();
+            const vw = window.innerWidth;
+            const vh = window.innerHeight;
+
+            themeMenu.style.maxHeight = '';
+            themeMenuList.style.maxHeight = '';
+
+            const spaceBelow = vh - rect.bottom - margin * 2;
+            const spaceAbove = rect.top - margin * 2;
+            const openUpwards = spaceBelow < 200 && spaceAbove > spaceBelow;
+            const available = Math.max(140, openUpwards ? spaceAbove : spaceBelow);
+            const cap = Math.min(available, Math.round(vh * 0.6));
+
+            const titleHeight = document.getElementById('theme-menu-title').offsetHeight || 30;
+            themeMenu.style.maxHeight = cap + 'px';
+            themeMenuList.style.maxHeight = Math.max(80, cap - titleHeight) + 'px';
+
+            const width = Math.min(themeMenu.offsetWidth || 208, vw - margin * 2);
+            themeMenu.style.width = width + 'px';
+            const height = themeMenu.offsetHeight;
+
+            // A hidden or detached anchor reports a zero rect, which would pin the menu
+            // to the top-left corner. Centre it instead so it stays usable.
+            if (!rect.width && !rect.height) {
+                themeMenu.style.left = Math.round((vw - width) / 2) + 'px';
+                themeMenu.style.top = Math.round((vh - height) / 2) + 'px';
+                return;
+            }
+
+            let left = rect.right - width;
+            left = Math.max(margin, Math.min(left, vw - width - margin));
+
+            const top = openUpwards
+                ? Math.max(margin, rect.top - height - margin)
+                : Math.min(rect.bottom + margin, vh - height - margin);
+
+            themeMenu.style.left = left + 'px';
+            themeMenu.style.top = Math.max(margin, top) + 'px';
+        }
+
+        function openThemeMenu(anchor) {
+            themeMenuAnchor = anchor;
+            buildThemeMenu();
+            themeMenu.classList.add('open');
+            themeMenu.setAttribute('aria-hidden', 'false');
+            anchor.setAttribute('aria-expanded', 'true');
+            positionThemeMenu(anchor);
+
+            const active = themeMenuList.querySelector('.theme-option[aria-checked="true"]');
+            if (active) active.scrollIntoView({ block: 'nearest' });
+            (active || themeMenuList.querySelector('.theme-option'))?.focus({ preventScroll: true });
+        }
+
+        function closeThemeMenu(restoreFocus = false) {
+            if (!themeMenu.classList.contains('open')) return;
+            themeMenu.classList.remove('open');
+            themeMenu.setAttribute('aria-hidden', 'true');
+            if (themeMenuAnchor) {
+                themeMenuAnchor.setAttribute('aria-expanded', 'false');
+                if (restoreFocus) themeMenuAnchor.focus({ preventScroll: true });
+            }
+            themeMenuAnchor = null;
+        }
+
+        function toggleThemeMenu(anchor) {
+            if (themeMenu.classList.contains('open') && themeMenuAnchor === anchor) {
+                closeThemeMenu(true);
+            } else {
+                closeThemeMenu();
+                openThemeMenu(anchor);
+            }
+        }
+
+        ['theme-toggle-desktop', 'theme-toggle-mobile'].forEach(id => {
+            const btn = document.getElementById(id);
+            if (!btn) return;
+            btn.setAttribute('aria-haspopup', 'true');
+            btn.setAttribute('aria-expanded', 'false');
+            btn.onclick = (e) => {
+                e.stopPropagation();
+                toggleThemeMenu(btn);
+            };
+        });
+
+        document.addEventListener('click', (e) => {
+            if (!themeMenu.classList.contains('open')) return;
+            if (!themeMenu.contains(e.target) && e.target !== themeMenuAnchor) closeThemeMenu();
+        });
+
+        document.addEventListener('keydown', (e) => {
+            if (!themeMenu.classList.contains('open')) return;
+            const options = [...themeMenuList.querySelectorAll('.theme-option')];
+            const index = options.indexOf(document.activeElement);
+
+            if (e.key === 'Escape') {
+                e.preventDefault();
+                closeThemeMenu(true);
+            } else if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+                e.preventDefault();
+                const next = e.key === 'ArrowDown'
+                    ? (index + 1) % options.length
+                    : (index - 1 + options.length) % options.length;
+                options[next]?.focus({ preventScroll: true });
+                options[next]?.scrollIntoView({ block: 'nearest' });
+            } else if (e.key === 'Home' || e.key === 'End') {
+                e.preventDefault();
+                const target = e.key === 'Home' ? options[0] : options[options.length - 1];
+                target?.focus({ preventScroll: true });
+                target?.scrollIntoView({ block: 'nearest' });
+            }
+        });
+
+        window.addEventListener('resize', () => {
+            if (themeMenu.classList.contains('open') && themeMenuAnchor) positionThemeMenu(themeMenuAnchor);
+        });
+
         if (typeof CONFIG !== 'undefined') initTheme();
 
         // --- 3. FETCH DATA (GitHub API) ---

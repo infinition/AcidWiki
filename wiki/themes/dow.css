@@ -1,0 +1,41 @@
+/* Dow. Palette lifted from the Dow extension popup: orange 500 on near-black
+   greys, with amber for secondary emphasis. */
+:root {
+    --bg-body: #111213;
+    --bg-sidebar: #18191c;
+    --border-color: #2b2c2f;
+    --text-main: #94a3b8;
+    --text-heading: #f8fafc;
+    --accent-green: #f97316;
+    --accent-dim: rgba(249, 115, 22, 0.12);
+    --code-bg: #1a1b1d;
+}
+
+::-webkit-scrollbar-thumb {
+    background: linear-gradient(180deg, #f97316, #ea580c) !important;
+}
+
+.text-hack-green {
+    color: #f97316 !important;
+}
+
+.bg-hack-greenDim {
+    background-color: rgba(249, 115, 22, 0.12) !important;
+}
+
+.border-hack-green {
+    border-color: #f97316 !important;
+}
+
+.markdown-body a {
+    color: #fb923c !important;
+}
+
+.markdown-body a:hover {
+    border-bottom-color: #fb923c !important;
+}
+
+/* Amber keeps inline code readable without competing with links */
+.markdown-body code {
+    color: #fbbf24 !important;
+}
