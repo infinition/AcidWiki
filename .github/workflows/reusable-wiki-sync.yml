@@ -85,6 +85,15 @@ jobs:
             cp -a wiki/* _site/wiki/ || true
           fi
 
+          # 4. Le logo du moteur ne doit pas usurper l'identite du repo appelant.
+          # Sans ca, wiki/assets/logo.png existe toujours et l'auto-detection du
+          # logo depuis le README n'est jamais atteinte. On le degrade en dernier
+          # recours, sauf si le repo appelant fournit reellement son propre logo.
+          if [ ! -f "wiki/assets/logo.png" ] && [ -f "_site/wiki/assets/logo.png" ]; then
+            echo "🎨 Aucun logo local : le logo AcidWiki devient le fallback final."
+            mv _site/wiki/assets/logo.png _site/wiki/assets/logo-fallback.png
+          fi
+
       - name: Dynamic Config Injection
         working-directory: ./_site
         env:

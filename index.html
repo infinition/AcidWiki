@@ -2264,6 +2264,35 @@
             hljs.highlightAll();
         }
 
+        // --- REPO-RELATIVE ASSET RESOLVER ---
+        // Markdown is fetched from raw.githubusercontent.com but rendered on the Pages
+        // domain, where only index.html and wiki/ exist. A relative image path such as
+        // "dow.png" would resolve against the wiki and 404, so rewrite it to point at
+        // the source repository instead. Resolution is relative to the document itself.
+        function resolveRepoAsset(url, docPath) {
+            if (!url || typeof url !== 'string') return url;
+            if (/^(https?:|data:|mailto:|blob:|#|\/\/)/i.test(url)) return url;
+            if (!STATE.repo || !STATE.branch) return url;
+
+            let clean = url.replace(/\\/g, '/').replace(/^\.\//, '');
+            let base = '';
+            if (clean.startsWith('/')) {
+                clean = clean.replace(/^\/+/, '');
+            } else {
+                const dir = (docPath || '').replace(/\\/g, '/').split('/').slice(0, -1).join('/');
+                base = dir ? dir + '/' : '';
+            }
+
+            const stack = [];
+            for (const part of (base + clean).split('/')) {
+                if (part === '..') stack.pop();
+                else if (part && part !== '.') stack.push(part);
+            }
+            if (!stack.length) return url;
+
+            return `https://raw.githubusercontent.com/${STATE.repo}/${STATE.branch}/${stack.join('/')}`;
+        }
+
         // --- 5. CONTENT LOADER (PERSISTENT CACHE OPTIMIZED) ---
         function getContentCacheKey(folder, filename) {
             return [STATE.wikiId || 'wiki', STATE.cacheVersion || 'dev', folder || 'root', filename].join('|');
@@ -2461,6 +2490,15 @@
 
                 const cleanHTML = DOMPurify.sanitize(marked.parse(text));
                 viewer.innerHTML = cleanHTML;
+
+                // Point relative images at the source repository. Covers both markdown
+                // syntax and inline <img> tags, which authors need for sizing and
+                // centering, and which the markdown renderer never sees.
+                viewer.querySelectorAll('img[src]').forEach(img => {
+                    const original = img.getAttribute('src');
+                    const resolved = resolveRepoAsset(original, filename);
+                    if (resolved !== original) img.setAttribute('src', resolved);
+                });
 
                 // --- AJOUT : RENDU DES ÉQUATIONS LATEX (KaTeX) ---
                 renderMathInElement(viewer, {
