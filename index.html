@@ -2361,6 +2361,52 @@
                 sample.startsWith('<html');
         }
 
+        // Encode chaque segment separement : les noms de fichiers portent souvent des
+        // espaces ou des accents, et un chemin brut casse la requete raw.
+        function encodeRepoPath(repoPath) {
+            return String(repoPath || '').split('/').map(encodeURIComponent).join('/');
+        }
+
+        // Source de verite du contenu. Le workflow n'assemble que wiki/ dans _site,
+        // alors que la decouverte via l'API expose aussi docs/ : sans ce repli, toute
+        // page en sous-dossier tombe en 404 sur Pages. Lire raw evite aussi d'attendre
+        // un redeploiement pour voir un markdown mis a jour.
+        // Retourne '' plutot que de jeter : chaque appelant garde son repli local.
+        async function fetchRawMarkdown(repoPath) {
+            if (!repoPath || !STATE.repo || !STATE.branch) return '';
+            try {
+                const res = await fetch(`https://raw.githubusercontent.com/${STATE.repo}/${STATE.branch}/${encodeRepoPath(repoPath)}`);
+                if (!res.ok) return '';
+                const text = await res.text();
+                if (!text || !text.trim() || isHtmlDocumentText(text)) return '';
+                return text;
+            } catch (e) {
+                return '';
+            }
+        }
+
+        // Repli statique, indispensable hors GitHub Pages (preview locale) et quand raw
+        // est injoignable. Un 404 Pages renvoie du HTML en 200 dans certaines configs,
+        // d'ou le filtre isHtmlDocumentText.
+        async function fetchLocalMarkdown(repoPath) {
+            if (!repoPath) return '';
+            try {
+                const res = await fetch(`./${encodeRepoPath(repoPath)}`);
+                if (!res.ok) return '';
+                const text = await res.text();
+                if (!text || !text.trim() || isHtmlDocumentText(text)) return '';
+                return text;
+            } catch (e) {
+                return '';
+            }
+        }
+
+        // `folder` porte deja la racine de contenu (docs, wiki) telle que decrite par
+        // l'arborescence du repo, le chemin est donc directement exploitable.
+        function getRepoPath(folder, filename, isRoot) {
+            return (isRoot || !folder) ? filename : `${folder}/${filename}`;
+        }
+
         function handleInitialRoute() {
             const urlParams = new URLSearchParams(window.location.search);
             const pageParam = urlParams.get('page');
@@ -2421,9 +2467,10 @@
                         const title = key;
                         const folder = currentPath;
                         jobs.push(async () => {
-                            const res = await fetch(`./${folder}/${filename}`);
-                            if (!res.ok) return;
-                            addSearchEntry(folder, title, filename, await res.text());
+                            const repoPath = getRepoPath(folder, filename, false);
+                            let text = await fetchRawMarkdown(repoPath);
+                            if (!text) text = await fetchLocalMarkdown(repoPath);
+                            addSearchEntry(folder, title, filename, text);
                         });
                     }
                 }
@@ -2433,18 +2480,8 @@
 
             (STATE.rootMdFiles || []).forEach(({ title, filename }) => {
                 jobs.push(async () => {
-                    let text = '';
-                    const isGitHubPages = /\.github\.io$/i.test(window.location.hostname);
-                    if (STATE.repo && STATE.branch) {
-                        try {
-                            const rawRes = await fetch(`https://raw.githubusercontent.com/${STATE.repo}/${STATE.branch}/${filename}`);
-                            if (rawRes.ok) text = await rawRes.text();
-                        } catch (_) { }
-                    }
-                    if ((!text || !text.trim() || isHtmlDocumentText(text)) && !isGitHubPages) {
-                        const localRes = await fetch(filename);
-                        if (localRes.ok) text = await localRes.text();
-                    }
+                    let text = await fetchRawMarkdown(filename);
+                    if (!text) text = await fetchLocalMarkdown(filename);
                     addSearchEntry('', title, filename, text);
                 });
             });
@@ -2710,63 +2747,21 @@
 
                 // 3. Network Fetch (Fallback)
                 if (!text) {
-                    try {
-                        const isGitHubPages = /\.github\.io$/i.test(window.location.hostname);
-                        if (isRoot && STATE.repo && STATE.branch) {
-                            const rawUrl = `https://raw.githubusercontent.com/${STATE.repo}/${STATE.branch}/${filename}`;
-                            const resRaw = await fetch(rawUrl);
-                            if (resRaw.ok) {
-                                const rawText = await resRaw.text();
-                                if (rawText && rawText.trim() && !isHtmlDocumentText(rawText)) {
-                                    text = rawText;
-                                }
-                            }
-                        }
+                    const repoPath = getRepoPath(folder, filename, isRoot);
 
-                        if (!text && !(isRoot && isGitHubPages)) {
-                            let path;
-                            if (isRoot) {
-                                path = `./${filename}`;
-                            } else {
-                                path = folder ? `./${folder}/${filename}` : `./${filename}`;
-                            }
+                    text = await fetchRawMarkdown(repoPath);
+                    if (!text) text = await fetchLocalMarkdown(repoPath);
 
-                            const res = await fetch(path);
-                            if (res.ok) {
-                                text = await res.text();
-                            } else {
-                                throw new Error("404");
-                            }
-                        }
-                    } catch (e) {
-                        // Pour les fichiers racine : repli sur raw GitHub
-                        if (isRoot && (!text || !text.trim() || isHtmlDocumentText(text)) && STATE.repo && STATE.branch) {
-                            try {
-                                const rawUrl = `https://raw.githubusercontent.com/${STATE.repo}/${STATE.branch}/${filename}`;
-                                const resRaw = await fetch(rawUrl);
-                                if (resRaw.ok) {
-                                    const rawText = await resRaw.text();
-                                    if (rawText && rawText.trim() && !isHtmlDocumentText(rawText)) text = rawText;
-                                }
-                            } catch (e2) { /* ignore */ }
-                        }
-                        if (!text) {
-                            if (!isRoot) {
-                                const sourceRoot = folder.split('/')[0] || '';
-                                const path2 = sourceRoot ? `./${sourceRoot}/${filename}` : `./${filename}`;
-                                const res2 = await fetch(path2);
-                                if (res2.ok) {
-                                    text = await res2.text();
-                                } else {
-                                    throw new Error(`Content not found.`);
-                                }
-                            } else {
-                                throw e;
-                            }
+                    // Dernier recours : un fichier pose a la racine de sa source alors
+                    // que la navigation l'expose dans un sous-dossier imbrique.
+                    if (!text && !isRoot && folder) {
+                        const sourceRoot = folder.split('/')[0];
+                        if (sourceRoot && sourceRoot !== folder) {
+                            text = await fetchLocalMarkdown(`${sourceRoot}/${filename}`);
                         }
                     }
 
-                    if (!text || !text.trim() || isHtmlDocumentText(text)) {
+                    if (!text) {
                         throw new Error('Content not found.');
                     }
 

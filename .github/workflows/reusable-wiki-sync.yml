@@ -85,6 +85,17 @@ jobs:
             cp -a wiki/* _site/wiki/ || true
           fi
 
+          # 3b. Idem pour docs/, l'autre racine de contenu reconnue par le moteur.
+          # Le moteur lit desormais le markdown depuis raw.githubusercontent, donc
+          # cette copie n'est qu'un repli : elle sert la preview locale et le cas ou
+          # raw est injoignable. Elle evite surtout qu'une page decouverte via l'API
+          # n'existe nulle part sur le site deploye.
+          if [ -d "docs" ]; then
+            echo "📂 Copie du contenu docs local..."
+            mkdir -p _site/docs
+            cp -a docs/* _site/docs/ || true
+          fi
+
           # 4. Le logo du moteur ne doit pas usurper l'identite du repo appelant.
           # Sans ca, wiki/assets/logo.png existe toujours et l'auto-detection du
           # logo depuis le README n'est jamais atteinte. On le degrade en dernier
