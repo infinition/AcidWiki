@@ -94,17 +94,50 @@
             const link = event.target.closest('#markdown-viewer a[href]');
             if (!link || event.defaultPrevented || event.button !== 0 || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
             const href = link.getAttribute('href');
-            if (!href || !href.startsWith('?page=')) return;
+            if (!href) return;
 
-            const page = decodeURIComponent(new URL(href, window.location.href).searchParams.get('page') || '');
-            const cleanPage = typeof window.stripWikiIdFromPageParam === 'function' ? window.stripWikiIdFromPageParam(page) : page;
-            const item = typeof window.getFlatPageList === 'function'
-                ? window.getFlatPageList().find(candidate => `${candidate.folder ? `${candidate.folder}/` : ''}${candidate.file}` === cleanPage)
-                : null;
-            if (!item) return;
+            if (href.startsWith('?page=')) {
+                const page = decodeURIComponent(new URL(href, window.location.href).searchParams.get('page') || '');
+                const cleanPage = typeof window.stripWikiIdFromPageParam === 'function' ? window.stripWikiIdFromPageParam(page) : page;
+                const item = typeof window.getFlatPageList === 'function'
+                    ? window.getFlatPageList().find(candidate => `${candidate.folder ? `${candidate.folder}/` : ''}${candidate.file}` === cleanPage)
+                    : null;
+                if (!item) return;
 
-            event.preventDefault();
-            window.loadContent(item.folder, item.title, item.file, true, item.folder === '');
+                event.preventDefault();
+                window.loadContent(item.folder, item.title, item.file, true, item.folder === '');
+                return;
+            }
+
+            if (/^(https?:|data:|mailto:|tel:|javascript:|#)/i.test(href)) return;
+
+            const [pathPart, hashPart] = href.split('#');
+            if (!pathPart) return;
+
+            let cleanPath = decodeURIComponent(pathPart).replace(/\\/g, '/').replace(/^\.\//, '');
+            if (!cleanPath.endsWith('.md') && !cleanPath.includes('.')) {
+                cleanPath += '.md';
+            }
+
+            if (typeof window.getFlatPageList !== 'function') return;
+            const flatList = window.getFlatPageList();
+
+            const targetFilename = cleanPath.split('/').pop();
+            const item = flatList.find(candidate => {
+                const fullCandidatePath = candidate.folder ? `${candidate.folder}/${candidate.file}` : candidate.file;
+                return fullCandidatePath.toLowerCase() === cleanPath.toLowerCase();
+            }) || flatList.find(candidate => candidate.file.toLowerCase() === targetFilename.toLowerCase());
+
+            if (item) {
+                event.preventDefault();
+                window.loadContent(item.folder, item.title, item.file, true, item.folder === '');
+                if (hashPart) {
+                    setTimeout(() => {
+                        const targetEl = document.getElementById(hashPart);
+                        if (targetEl) targetEl.scrollIntoView({ behavior: 'smooth' });
+                    }, 300);
+                }
+            }
         });
     }
 
