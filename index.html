@@ -386,6 +386,61 @@
             margin-bottom: 1.5rem;
         }
 
+        /* GitHub Callouts / Alerts */
+        .markdown-body blockquote.github-alert {
+            font-style: normal !important;
+            border-left-width: 4px !important;
+            padding: 0.75rem 1rem !important;
+            margin: 1rem 0 1.5rem 0 !important;
+            border-radius: 0 0.375rem 0.375rem 0 !important;
+        }
+        .markdown-body blockquote.github-alert p {
+            margin-bottom: 0.5rem !important;
+        }
+        .markdown-body blockquote.github-alert p:last-child {
+            margin-bottom: 0 !important;
+        }
+        .github-alert-title {
+            font-weight: 700;
+            font-size: 0.75rem;
+            line-height: 1rem;
+            display: flex;
+            align-items: center;
+            gap: 0.375rem;
+            margin-bottom: 0.5rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+        .markdown-body blockquote.alert-note {
+            border-left-color: #3b82f6 !important;
+            background: rgba(59, 130, 246, 0.08) !important;
+        }
+        .markdown-body blockquote.alert-note .github-alert-title { color: #60a5fa; }
+
+        .markdown-body blockquote.alert-tip {
+            border-left-color: #10b981 !important;
+            background: rgba(16, 185, 129, 0.08) !important;
+        }
+        .markdown-body blockquote.alert-tip .github-alert-title { color: #34d399; }
+
+        .markdown-body blockquote.alert-important {
+            border-left-color: #a855f7 !important;
+            background: rgba(168, 85, 247, 0.08) !important;
+        }
+        .markdown-body blockquote.alert-important .github-alert-title { color: #c084fc; }
+
+        .markdown-body blockquote.alert-warning {
+            border-left-color: #f59e0b !important;
+            background: rgba(245, 158, 11, 0.08) !important;
+        }
+        .markdown-body blockquote.alert-warning .github-alert-title { color: #fbbf24; }
+
+        .markdown-body blockquote.alert-caution {
+            border-left-color: #ef4444 !important;
+            background: rgba(239, 68, 68, 0.08) !important;
+        }
+        .markdown-body blockquote.alert-caution .github-alert-title { color: #f87171; }
+
         .markdown-body strong {
             color: var(--text-heading);
             font-weight: 700;
@@ -3019,6 +3074,36 @@
         }
 
         function enhanceMarkdownContent() {
+            // Render GitHub-style Callouts / Alerts ([!NOTE], [!TIP], [!IMPORTANT], [!WARNING], [!CAUTION])
+            document.querySelectorAll('#markdown-viewer blockquote').forEach(bq => {
+                const text = bq.textContent.trim();
+                const match = text.match(/^\[\!(NOTE|TIP|IMPORTANT|WARNING|CAUTION)\]/i);
+                if (match) {
+                    const type = match[1].toUpperCase();
+                    const config = {
+                        NOTE: { title: 'Note', icon: 'info', class: 'alert-note' },
+                        TIP: { title: 'Tip', icon: 'lightbulb', class: 'alert-tip' },
+                        IMPORTANT: { title: 'Important', icon: 'alert-circle', class: 'alert-important' },
+                        WARNING: { title: 'Warning', icon: 'alert-triangle', class: 'alert-warning' },
+                        CAUTION: { title: 'Caution', icon: 'shield-alert', class: 'alert-caution' }
+                    };
+                    const cfg = config[type] || config.NOTE;
+
+                    bq.classList.add('github-alert', cfg.class);
+
+                    bq.innerHTML = bq.innerHTML
+                        .replace(new RegExp(`^(\\s*<p>\\s*)\\[\\!${type}\\]\\s*`, 'i'), '$1')
+                        .replace(new RegExp(`^\\[\\!${type}\\]\\s*`, 'i'), '');
+
+                    if (!bq.querySelector('.github-alert-title')) {
+                        const header = document.createElement('div');
+                        header.className = 'github-alert-title';
+                        header.innerHTML = `<i data-lucide="${cfg.icon}" class="w-4 h-4"></i> <span>${cfg.title}</span>`;
+                        bq.prepend(header);
+                    }
+                }
+            });
+
             document.querySelectorAll('#markdown-viewer h1, #markdown-viewer h2, #markdown-viewer h3').forEach(h => {
                 if (!h.id) h.id = h.textContent.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
 
