@@ -1,4 +1,4 @@
-<img width="128" height="128" alt="AcidWiki" src="https://github.com/user-attachments/assets/4b9aba15-5567-4726-a193-7b6fd138b459" />
+<img width="336" height="336" alt="image-removebg-preview (8)" src="https://github.com/user-attachments/assets/3328de0f-c452-4c2e-800d-9e549259613c" />
 
 # AcidWiki
 
