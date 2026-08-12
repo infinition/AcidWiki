@@ -3619,10 +3619,45 @@
                         ? `<span class="text-sm font-normal text-gray-500 ml-2">(${r.name})</span>`
                         : '';
 
+                    let assetsHtml = '';
+                    if (Array.isArray(r.assets) && r.assets.length > 0) {
+                        const assetItems = r.assets.map(asset => {
+                            let sizeStr = '';
+                            if (asset.size) {
+                                const k = 1024;
+                                const sizes = ['B', 'KB', 'MB', 'GB'];
+                                const i = Math.floor(Math.log(asset.size) / Math.log(k));
+                                sizeStr = parseFloat((asset.size / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+                            }
+                            const downloadsStr = asset.download_count ? ` · ${asset.download_count} downloads` : '';
+                            return `
+                                <a href="${asset.browser_download_url}" target="_blank" rel="noopener noreferrer" 
+                                   class="inline-flex items-center gap-2 px-3 py-1.5 rounded bg-hack-sidebar border border-hack-border hover:border-hack-green text-xs font-mono text-hack-heading transition-colors group">
+                                    <i data-lucide="download" class="w-3.5 h-3.5 text-hack-green group-hover:scale-110 transition-transform"></i>
+                                    <span class="font-semibold">${asset.name}</span>
+                                    <span class="text-gray-500 text-[11px]">${sizeStr}${downloadsStr}</span>
+                                </a>
+                            `;
+                        }).join('');
+
+                        assetsHtml = `
+                            <div class="mt-4">
+                                <div class="text-[11px] font-semibold uppercase tracking-wider text-gray-400 mb-2 flex items-center gap-1">
+                                    <i data-lucide="package" class="w-3.5 h-3.5 text-hack-green"></i> Downloads & Assets (${r.assets.length})
+                                </div>
+                                <div class="flex flex-wrap gap-2">
+                                    ${assetItems}
+                                </div>
+                            </div>
+                        `;
+                    }
+
                     div.innerHTML = `
                 <div class="flex flex-col md:flex-row md:items-center justify-between mb-3 gap-1">
                     <h2 class="text-2xl font-bold !mt-0 !mb-0 flex items-center text-hack-green">
-                        ${r.tag_name}
+                        <a href="${r.html_url}" target="_blank" rel="noopener noreferrer" class="hover:underline flex items-center gap-1.5">
+                            <i data-lucide="tag" class="w-5 h-5"></i> ${r.tag_name}
+                        </a>
                         ${r.prerelease ? '<span class="ml-2 text-[10px] border border-orange-500 text-orange-500 px-1.5 rounded uppercase">Pre-release</span>' : ''}
                         ${secondaryTitle}
                     </h2>
@@ -3635,11 +3670,16 @@
                     ${body}
                 </div>
                 
-                <div class="mt-3 flex gap-4">
-                    <a href="${r.html_url}" target="_blank" rel="noopener noreferrer" class="text-xs text-hack-green opacity-70 hover:opacity-100 flex items-center gap-1">
-                        <i data-lucide="github" class="w-3 h-3"></i> View on GitHub
+                ${assetsHtml}
+
+                <div class="mt-4 flex flex-wrap gap-4 items-center border-t border-hack-border/30 pt-3">
+                    <a href="${r.html_url}" target="_blank" rel="noopener noreferrer" class="text-xs text-hack-green opacity-80 hover:opacity-100 flex items-center gap-1 font-mono">
+                        <i data-lucide="github" class="w-3.5 h-3.5"></i> View Release on GitHub
                     </a>
-                     ${r.assets.length > 0 ? `<span class="text-xs text-gray-500 flex items-center gap-1"><i data-lucide="package" class="w-3 h-3"></i> ${r.assets.length} assets</span>` : ''}
+                    ${r.zipball_url ? `
+                    <a href="${r.zipball_url}" target="_blank" rel="noopener noreferrer" class="text-xs text-gray-400 hover:text-hack-green flex items-center gap-1 font-mono">
+                        <i data-lucide="file-code" class="w-3.5 h-3.5"></i> Source code (zip)
+                    </a>` : ''}
                 </div>
             `;
                     list.appendChild(div);
