@@ -2127,9 +2127,9 @@
                 if (!table.has(normalized)) table.set(normalized, value);
             };
 
-            const indexed = STATE.contentIndex && STATE.contentIndex.files;
-            if (indexed) {
-                for (const [key, value] of Object.entries(indexed)) add(key, value);
+            if (pendingLinkTable) {
+                const { paths, lookup } = pendingLinkTable;
+                for (const [key, id] of Object.entries(lookup)) add(key, paths[id]);
             }
 
             // Repli : les pages connues de la navigation, avec leur prefixe reel.
@@ -2147,6 +2147,46 @@
 
             return table;
         }
+
+        // La table de resolution vit dans un fichier a part : elle est lourde et ne
+        // sert qu'aux pages qui contiennent vraiment un lien [[wiki]]. Une seule
+        // requete, memorisee, declenchee au premier besoin.
+        let linkTablePromise = null;
+
+        function loadLinkTable() {
+            if (linkTablePromise) return linkTablePromise;
+            const name = STATE.contentIndex && STATE.contentIndex.linksFile;
+            if (!name) return (linkTablePromise = Promise.resolve(null));
+
+            const base = contentIndexUrl().split('/').slice(0, -1).join('/');
+            linkTablePromise = (async () => {
+                try {
+                    const res = await fetch(`./${base ? base + '/' : ''}${name}`, { cache: 'no-cache' });
+                    if (!res.ok) return null;
+                    const data = await res.json();
+                    if (!data || !Array.isArray(data.paths) || !data.lookup) return null;
+                    debugLog(`[AcidWiki] 🔗 Link table loaded (${Object.keys(data.lookup).length} entries)`);
+                    return data;
+                } catch (error) {
+                    debugLog('[AcidWiki] ℹ️ No link table available.');
+                    return null;
+                }
+            })();
+            return linkTablePromise;
+        }
+
+        // Appelee avant le rendu d'une page qui porte des liens de coffre.
+        async function ensureLinkTable(text) {
+            if (!/\[\[/.test(text || '')) return;
+            const table = await loadLinkTable();
+            if (!table || linkTableMerged) return;
+            linkTableMerged = true;
+            invalidateVaultLookup();
+            pendingLinkTable = table;
+        }
+
+        let linkTableMerged = false;
+        let pendingLinkTable = null;
 
         function resolveVaultPath(target, baseDir) {
             if (!target) return null;
@@ -2983,11 +3023,21 @@
         }
 
         async function loadContent(folder, title, filename, pushHistory = true, isRoot = false, highlightQuery = null) {
-            if (CONFIG.features.pageTransitions && document.startViewTransition) {
-                document.startViewTransition(() => performLoadContent(folder, title, filename, pushHistory, isRoot, highlightQuery));
-            } else {
-                performLoadContent(folder, title, filename, pushHistory, isRoot, highlightQuery);
+            withPageTransition(() => performLoadContent(folder, title, filename, pushHistory, isRoot, highlightQuery));
+        }
+
+        // Une navigation qui en interrompt une autre fait rejeter les promesses de la
+        // transition. Personne ne les attendait, le navigateur signalait donc une
+        // erreur non capturee a chaque clic rapide dans la barre laterale.
+        function withPageTransition(run) {
+            if (!CONFIG.features.pageTransitions || !document.startViewTransition) {
+                run();
+                return;
             }
+            const transition = document.startViewTransition(run);
+            transition.ready?.catch(() => {});
+            transition.finished?.catch(() => {});
+            transition.updateCallbackDone?.catch(() => {});
         }
 
         async function performLoadContent(folder, title, filename, pushHistory = true, isRoot = false, highlightQuery = null) {
@@ -3014,7 +3064,7 @@
             const breadcrumbs = document.getElementById('breadcrumbs');
 
             let breadcrumbParts = [];
-            breadcrumbParts.push(`<span class="hover:text-hack-heading cursor-pointer" onclick="loadDefault()">wiki</span>`);
+            breadcrumbParts.push(`<span class="hover:text-hack-heading cursor-pointer" onclick="loadDefault()">${CONFIG.ui.breadcrumbRoot || 'wiki'}</span>`);
 
             let currentPath = "";
             const folderParts = folder.split('/').filter(s => s);
@@ -3131,6 +3181,7 @@
                 }
 
                 const sourcePath = getRepoPath(folder, filename, isRoot);
+                await ensureLinkTable(text);
                 const prepared = renderableMarkdown(text, sourcePath);
                 const cleanHTML = DOMPurify.sanitize(marked.parse(prepared.markdown));
                 viewer.innerHTML = cleanHTML;
@@ -3182,7 +3233,12 @@
                     pageKey: sourcePath,
                     quiz: prepared.interactive.quiz,
                     flashcards: prepared.interactive.flashcards,
-                    sidecarUrl: sourceUrl(sourcePath)
+                    sidecarUrl: sourceUrl(sourcePath),
+                    // Avec un index statique on sait exactement quels fichiers existent.
+                    // Sans index, null laisse le module sonder les quatre suffixes.
+                    knownSidecars: STATE.contentIndex
+                        ? (STATE.contentIndex.sidecars?.[sourcePath] || [])
+                        : null
                 });
 
                 if (pushHistory) {
@@ -3273,18 +3329,21 @@
         }
 
         async function fetchLastUpdated(folder, filename) {
-            if (CONFIG.versioning.type === 'local') {
-                document.getElementById('last-updated').textContent = `${CONFIG.ui.lastUpdatedText}: ${CONFIG.versioning.manualDate}`;
-                return;
-            }
-
             const label = document.getElementById('last-updated');
 
-            // L'index statique porte la date de modification du fichier : aucune requete.
+            // L'index statique porte la date reelle du fichier. Elle passe avant la
+            // date figee de la configuration, qui ne vaut que faute de mieux.
             const indexedPath = getRepoPath(folder, filename, !folder);
             const indexedDate = STATE.contentIndex && STATE.contentIndex.mtimes && STATE.contentIndex.mtimes[indexedPath];
             if (indexedDate) {
                 label.textContent = `${CONFIG.ui.lastUpdatedText}: ${new Date(indexedDate).toLocaleDateString()}`;
+                return;
+            }
+
+            if (CONFIG.versioning.type === 'local') {
+                label.textContent = CONFIG.versioning.manualDate
+                    ? `${CONFIG.ui.lastUpdatedText}: ${CONFIG.versioning.manualDate}`
+                    : '';
                 return;
             }
 
@@ -3960,11 +4019,7 @@
 
         // --- 8. CHANGELOG ---
         async function toggleVersionsPage(btn, pushHistory = true) {
-            if (CONFIG.features.pageTransitions && document.startViewTransition) {
-                document.startViewTransition(() => performToggleVersionsPage(btn, pushHistory));
-            } else {
-                performToggleVersionsPage(btn, pushHistory);
-            }
+            withPageTransition(() => performToggleVersionsPage(btn, pushHistory));
         }
 
         async function performToggleVersionsPage(btn, pushHistory = true) {

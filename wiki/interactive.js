@@ -67,12 +67,20 @@
         return { markdown: stripped, flashcards, quiz };
     }
 
-    /** Cherche les fichiers json poses a cote de la page. Un 404 est un cas normal. */
-    async function loadSidecars(baseUrl) {
+    /**
+     * Cherche les fichiers json poses a cote de la page.
+     * `known` vient de l'index statique : quand il est fourni, on ne demande que
+     * les fichiers qui existent vraiment, la ou une sonde a l'aveugle produirait
+     * quatre 404 par page consultee.
+     */
+    async function loadSidecars(baseUrl, known) {
         if (!baseUrl) return { quiz: [], flashcards: [] };
+        if (known && !known.length) return { quiz: [], flashcards: [] };
         const stem = baseUrl.replace(/\.md$/i, '');
+        const allowed = known ? new Set(known) : null;
 
         const fetchOne = async (suffix) => {
+            if (allowed && !allowed.has(suffix)) return [];
             try {
                 const res = await fetch(stem + suffix, { cache: 'no-cache' });
                 if (!res.ok) return [];
@@ -178,14 +186,37 @@
     }
 
     function paint(html) {
-        ensureModal().querySelector('.acid-modal-body').innerHTML = html;
+        const body = ensureModal().querySelector('.acid-modal-body');
+        body.innerHTML = html;
         window.lucide?.createIcons();
+
+        // Les cartes d'une academie portent presque toujours des formules. Elles
+        // passent par le meme rendu que le corps de page.
+        if (typeof window.renderMathInElement === 'function') {
+            try {
+                window.renderMathInElement(body, {
+                    delimiters: [
+                        { left: '$$', right: '$$', display: true },
+                        { left: '$', right: '$', display: false },
+                        { left: '\(', right: '\)', display: false },
+                        { left: '\[', right: '\]', display: true }
+                    ],
+                    throwOnError: false
+                });
+            } catch (error) {
+                // Une formule invalide ne doit pas empecher la carte de s'afficher.
+            }
+        }
     }
 
     function openModal() {
         const node = ensureModal();
         node.hidden = false;
-        requestAnimationFrame(() => node.classList.add('is-open'));
+        // Un reflow force suffit a declencher la transition d'ouverture. Passer par
+        // requestAnimationFrame laissait la modale invisible quand l'onglet n'etait
+        // pas en train de composer d'images : le callback n'etait jamais appele.
+        void node.offsetWidth;
+        node.classList.add('is-open');
     }
 
     function closeSession() {
@@ -381,7 +412,7 @@
      * Les fichiers json voisins sont cherches en arriere-plan : la page s'affiche
      * sans attendre, la barre apparait ensuite si quelque chose a ete trouve.
      */
-    async function mount({ container, pageKey, quiz = [], flashcards = [], sidecarUrl = '' }) {
+    async function mount({ container, pageKey, quiz = [], flashcards = [], sidecarUrl = '', knownSidecars = null }) {
         if (!container) return;
         installModalEvents();
 
@@ -413,7 +444,7 @@
 
         render();
 
-        const sidecars = await loadSidecars(sidecarUrl);
+        const sidecars = await loadSidecars(sidecarUrl, knownSidecars);
         if (sidecars.quiz.length || sidecars.flashcards.length) {
             // La page a pu changer pendant la recherche des fichiers voisins.
             if (!container.isConnected) return;

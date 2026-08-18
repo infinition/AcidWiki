@@ -106,7 +106,9 @@ const CONFIG = {
         indexingSearchText: "Indexing documents",
         themeChangedText: "Theme changed to: ",
         menuText: "Menu",
-        onThisPageMobile: "On this page"
+        onThisPageMobile: "On this page",
+        // Premier maillon du fil d'Ariane, cliquable, ramene a l'accueil.
+        breadcrumbRoot: "wiki"
     },
 
     // Logo Settings
