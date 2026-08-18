@@ -62,6 +62,10 @@
         rel="stylesheet">
 
     <link rel="stylesheet" href="wiki/enhancements.css">
+    <link rel="stylesheet" href="wiki/interactive.css">
+
+    <script src="wiki/obsidian.js"></script>
+    <script src="wiki/interactive.js"></script>
 
     <style>
         /* --- THEME ENGINE (CSS Variables) --- */
@@ -2108,6 +2112,103 @@
             return sorted;
         }
 
+        // --- RESOLUTION DES CIBLES OBSIDIAN ---
+        // Un lien [[Chapitre 3]] ne porte ni dossier ni extension : il faut une table
+        // qui associe un nom a un chemin reel. L'index statique en fournit une complete
+        // (pieces jointes comprises) ; a defaut on la reconstruit depuis la navigation,
+        // ce qui couvre les pages mais pas les medias.
+        let vaultLookup = null;
+
+        function buildVaultLookup() {
+            const table = new Map();
+            const add = (key, value) => {
+                if (!key) return;
+                const normalized = String(key).toLowerCase().replace(/\\/g, '/');
+                if (!table.has(normalized)) table.set(normalized, value);
+            };
+
+            const indexed = STATE.contentIndex && STATE.contentIndex.files;
+            if (indexed) {
+                for (const [key, value] of Object.entries(indexed)) add(key, value);
+            }
+
+            // Repli : les pages connues de la navigation, avec leur prefixe reel.
+            for (const item of getFlatPageList()) {
+                const real = getRepoPath(item.folder, item.file, item.folder === '');
+                add(real, real);
+                add(item.file, real);
+                add(item.file.replace(/\.md$/i, ''), real);
+                add(item.folder ? `${item.folder}/${item.file}` : item.file, real);
+            }
+            for (const item of STATE.rootMdFiles || []) {
+                add(item.filename, item.filename);
+                add(item.filename.replace(/\.md$/i, ''), item.filename);
+            }
+
+            return table;
+        }
+
+        function resolveVaultPath(target, baseDir) {
+            if (!target) return null;
+            if (!vaultLookup) vaultLookup = buildVaultLookup();
+
+            const clean = String(target).replace(/\\/g, '/').replace(/^\.\//, '').trim();
+            const candidates = [];
+
+            // Un chemin relatif au document l'emporte sur un homonyme ailleurs.
+            if (baseDir) {
+                const joined = [];
+                for (const part of `${baseDir}/${clean}`.split('/')) {
+                    if (part === '..') joined.pop();
+                    else if (part && part !== '.') joined.push(part);
+                }
+                const relative = joined.join('/');
+                candidates.push(relative, `${relative}.md`);
+            }
+
+            candidates.push(clean, `${clean}.md`);
+
+            // Dernier recours : le seul nom de fichier, comportement d'Obsidian.
+            const base = clean.split('/').pop();
+            candidates.push(base, `${base}.md`);
+
+            for (const candidate of candidates) {
+                const hit = vaultLookup.get(candidate.toLowerCase());
+                if (hit) return hit;
+            }
+            return null;
+        }
+
+        // Une page peut avoir ete ajoutee ou l'index recharge : on jette la table.
+        function invalidateVaultLookup() {
+            vaultLookup = null;
+        }
+
+        // Le contenu est lu sur raw.githubusercontent quand un depot est configure,
+        // sinon a cote du moteur. Medias et fichiers annexes suivent la meme regle.
+        function sourceUrl(path) {
+            if (!path) return '';
+            return (STATE.repo && STATE.branch)
+                ? `https://raw.githubusercontent.com/${STATE.repo}/${STATE.branch}/${encodeRepoPath(path)}`
+                : `./${encodeRepoPath(path)}`;
+        }
+
+        function configureObsidianLayer() {
+            if (!window.AcidWikiObsidian) return;
+            window.AcidWikiObsidian.configure({
+                resolvePath: resolveVaultPath,
+                assetUrl: sourceUrl,
+                // La navigation ignore la racine de contenu, le lien doit faire pareil.
+                pageUrl: (path) => {
+                    let shown = path;
+                    if (STATE.contentPrefix && shown.startsWith(`${STATE.contentPrefix}/`)) {
+                        shown = shown.slice(STATE.contentPrefix.length + 1);
+                    }
+                    return `?page=${encodeRepoPath(shown)}`;
+                }
+            });
+        }
+
         // --- MODES DE FONCTIONNEMENT ---
         // Un wiki peut etre servi de quatre facons. Le mode se declare dans
         // acidwiki.json ; "auto" conserve exactement l'ancien comportement, avec en
@@ -2254,6 +2355,8 @@
                 }
 
                 STATE.rootMdFiles = rootMdFiles.length > 0 ? rootMdFiles : (CONFIG.features.showRootReadme ? [{ title: 'README.md'.replace(/\.md$/, '').replace(/_/g, ' '), filename: 'README.md' }] : []);
+                invalidateVaultLookup();
+                configureObsidianLayer();
                 if (STATE.rootMdFiles.length > 0) {
                     const rootObj = Object.fromEntries(STATE.rootMdFiles.map(f => [f.title, f.filename]));
                     STATE.wikiData = { __root__: rootObj, ...structure };
@@ -2833,6 +2936,28 @@
             return `https://raw.githubusercontent.com/${STATE.repo}/${STATE.branch}/${stack.join('/')}`;
         }
 
+        // Passe obligee avant tout rendu Markdown : traduction Obsidian puis extraction
+        // des blocs interactifs. Sur un document sans syntaxe Obsidian et sans bloc
+        // quizz, la fonction rend le texte inchange.
+        function renderableMarkdown(text, docPath) {
+            let markdown = text;
+            let frontmatter = {};
+
+            if (window.AcidWikiObsidian) {
+                const result = window.AcidWikiObsidian.preprocess(markdown, { docPath });
+                markdown = result.markdown;
+                frontmatter = result.frontmatter;
+            }
+
+            let interactive = { flashcards: null, quiz: null };
+            if (window.AcidWikiInteractive) {
+                interactive = window.AcidWikiInteractive.extract(markdown);
+                markdown = interactive.markdown;
+            }
+
+            return { markdown, frontmatter, interactive };
+        }
+
         // --- 5. CONTENT LOADER (PERSISTENT CACHE OPTIMIZED) ---
         function expandFolderHierarchy(folder) {
             const ancestors = [];
@@ -3005,7 +3130,9 @@
                     } catch (e) { console.warn("LocalStorage full"); }
                 }
 
-                const cleanHTML = DOMPurify.sanitize(marked.parse(text));
+                const sourcePath = getRepoPath(folder, filename, isRoot);
+                const prepared = renderableMarkdown(text, sourcePath);
+                const cleanHTML = DOMPurify.sanitize(marked.parse(prepared.markdown));
                 viewer.innerHTML = cleanHTML;
 
                 // Point relative images at the source repository. Covers both markdown
@@ -3047,6 +3174,16 @@
                 enhanceMarkdownContent();
                 generateTOC();
                 renderPagination(folder, title);
+
+                // Quizz et flashcards : blocs de la page et fichiers json voisins.
+                // Sans donnee, rien n'est ajoute et la fonction ne coute qu'un test.
+                window.AcidWikiInteractive?.mount({
+                    container: viewer,
+                    pageKey: sourcePath,
+                    quiz: prepared.interactive.quiz,
+                    flashcards: prepared.interactive.flashcards,
+                    sidecarUrl: sourceUrl(sourcePath)
+                });
 
                 if (pushHistory) {
                     const encodedFilename = addWikiIdToFilename(filename);
@@ -3223,33 +3360,80 @@
 
         function enhanceMarkdownContent() {
             // Render GitHub-style Callouts / Alerts ([!NOTE], [!TIP], [!IMPORTANT], [!WARNING], [!CAUTION])
+            // Alertes GitHub ([!NOTE]) et callouts Obsidian (> [!tip]- Titre libre)
+            // partagent la meme ecriture. On traite les deux ici : les types propres a
+            // Obsidian, le titre personnalise et le marqueur de repli en plus.
+            const CALLOUTS = {
+                NOTE: { title: 'Note', icon: 'info', class: 'alert-note' },
+                TIP: { title: 'Astuce', icon: 'lightbulb', class: 'alert-tip' },
+                HINT: { title: 'Astuce', icon: 'lightbulb', class: 'alert-tip' },
+                IMPORTANT: { title: 'Important', icon: 'alert-circle', class: 'alert-important' },
+                WARNING: { title: 'Attention', icon: 'alert-triangle', class: 'alert-warning' },
+                CAUTION: { title: 'Prudence', icon: 'shield-alert', class: 'alert-caution' },
+                DANGER: { title: 'Danger', icon: 'zap', class: 'alert-caution' },
+                ERROR: { title: 'Erreur', icon: 'x-circle', class: 'alert-failure' },
+                BUG: { title: 'Bug', icon: 'bug', class: 'alert-bug' },
+                FAILURE: { title: 'Echec', icon: 'x-circle', class: 'alert-failure' },
+                SUCCESS: { title: 'Reussite', icon: 'check-circle', class: 'alert-success' },
+                CHECK: { title: 'Reussite', icon: 'check-circle', class: 'alert-success' },
+                DONE: { title: 'Termine', icon: 'check-circle', class: 'alert-success' },
+                QUESTION: { title: 'Question', icon: 'help-circle', class: 'alert-question' },
+                FAQ: { title: 'FAQ', icon: 'help-circle', class: 'alert-question' },
+                EXAMPLE: { title: 'Exemple', icon: 'code', class: 'alert-example' },
+                QUOTE: { title: 'Citation', icon: 'quote', class: 'alert-quote' },
+                CITE: { title: 'Citation', icon: 'quote', class: 'alert-quote' },
+                ABSTRACT: { title: 'Resume', icon: 'clipboard-list', class: 'alert-abstract' },
+                SUMMARY: { title: 'Resume', icon: 'clipboard-list', class: 'alert-abstract' },
+                TLDR: { title: 'En bref', icon: 'clipboard-list', class: 'alert-abstract' },
+                INFO: { title: 'Information', icon: 'info', class: 'alert-note' },
+                TODO: { title: 'A faire', icon: 'list-checks', class: 'alert-todo' }
+            };
+
             document.querySelectorAll('#markdown-viewer blockquote').forEach(bq => {
-                const text = bq.textContent.trim();
-                const match = text.match(/^\[\!(NOTE|TIP|IMPORTANT|WARNING|CAUTION)\]/i);
-                if (match) {
-                    const type = match[1].toUpperCase();
-                    const config = {
-                        NOTE: { title: 'Note', icon: 'info', class: 'alert-note' },
-                        TIP: { title: 'Tip', icon: 'lightbulb', class: 'alert-tip' },
-                        IMPORTANT: { title: 'Important', icon: 'alert-circle', class: 'alert-important' },
-                        WARNING: { title: 'Warning', icon: 'alert-triangle', class: 'alert-warning' },
-                        CAUTION: { title: 'Caution', icon: 'shield-alert', class: 'alert-caution' }
-                    };
-                    const cfg = config[type] || config.NOTE;
+                if (bq.classList.contains('github-alert')) return;
+                const match = bq.textContent.trim().match(/^\[!([A-Za-z-]+)\]([+-]?)[ \t]*([^\n]*)/);
+                if (!match) return;
 
-                    bq.classList.add('github-alert', cfg.class);
+                const type = match[1].toUpperCase();
+                const cfg = CALLOUTS[type];
+                if (!cfg) return;
 
-                    bq.innerHTML = bq.innerHTML
-                        .replace(new RegExp(`^(\\s*<p>\\s*)\\[\\!${type}\\]\\s*`, 'i'), '$1')
-                        .replace(new RegExp(`^\\[\\!${type}\\]\\s*`, 'i'), '');
+                const foldMark = match[2];
+                const customTitle = (match[3] || '').trim();
 
-                    if (!bq.querySelector('.github-alert-title')) {
-                        const header = document.createElement('div');
-                        header.className = 'github-alert-title';
-                        header.innerHTML = `<i data-lucide="${cfg.icon}" class="w-4 h-4"></i> <span>${cfg.title}</span>`;
-                        bq.prepend(header);
-                    }
+                bq.classList.add('github-alert', cfg.class);
+                if (foldMark) bq.classList.add('is-foldable');
+                if (foldMark === '-') bq.classList.add('is-folded');
+
+                // Le marqueur et le titre libre vivent dans le premier paragraphe rendu.
+                const marker = new RegExp('^\\[!' + type + '\\][+-]?[ \\t]*' + (customTitle
+                    ? customTitle.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+                    : '') + '[ \\t]*', 'i');
+                const first = bq.querySelector('p');
+                if (first) {
+                    first.innerHTML = first.innerHTML.replace(marker, '');
+                    if (!first.textContent.trim() && !first.querySelector('img')) first.remove();
                 }
+
+                const header = document.createElement('div');
+                header.className = 'github-alert-title';
+                header.innerHTML = `<i data-lucide="${cfg.icon}" class="w-4 h-4"></i> <span>${customTitle || cfg.title}</span>`;
+                if (foldMark) {
+                    header.addEventListener('click', () => bq.classList.toggle('is-folded'));
+                }
+                bq.prepend(header);
+            });
+
+            // Les apercus PDF sont reconstruits ici : le nettoyage HTML retire les
+            // iframe, la couche Obsidian ne pose donc qu'un conteneur porteur de l'URL.
+            document.querySelectorAll('#markdown-viewer .pdf-wrap[data-pdf]').forEach(wrap => {
+                if (wrap.querySelector('.pdf-embed')) return;
+                const frame = document.createElement('iframe');
+                frame.className = 'pdf-embed';
+                frame.src = `${wrap.dataset.pdf}#view=FitH`;
+                frame.title = wrap.dataset.pdfLabel || 'PDF';
+                frame.loading = 'lazy';
+                wrap.appendChild(frame);
             });
 
             document.querySelectorAll('#markdown-viewer h1, #markdown-viewer h2, #markdown-viewer h3').forEach(h => {
