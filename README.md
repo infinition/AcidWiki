@@ -14,19 +14,25 @@ The core logic lives in this repository. Client repositories reference AcidWiki 
 
 ## Features
 
-- Centralized engine: client repos stay thin, logic stays here.
-- Configuration via `acidwiki.json` only, no JavaScript required.
-- Auto-discovery of docs via GitHub API — add a Markdown file, it appears in the nav.
-- Detects GitHub Releases or Tags automatically for version display.
-- Project name, copyright year, and GitHub links injected at build time.
-- Daily CRON update: checks for engine changes and self-patches.
-- Dark mode, responsive layout, smooth transitions.
-- Native Mermaid diagrams, centered on a fully transparent canvas.
-- Deep Math Academy theme with an animated particle background.
-- Natural folder sorting, stable folder icons, and Index/README-first breadcrumbs.
-- Scrollable, self-following table of contents for long chapters.
+- Un seul moteur pour tous les usages : depot GitHub, serveur local, coffre
+  Obsidian, ou fichier statique hors ligne. Le mode se declare dans un JSON.
+- Configuration par `acidwiki.json` uniquement, aucun JavaScript a ecrire.
+- Decouverte automatique du contenu : ajoutez un fichier Markdown, il apparait.
+- Index statique optionnel : zero appel API, fonctionne hors ligne, pas de
+  plafond de requetes GitHub.
+- Syntaxe de coffre Obsidian rendue partout : `[[liens]]`, `![[images]]`,
+  videos, sons, PDF integres, callouts, en-tete YAML.
+- Quizz et flashcards, dans la page ou dans un fichier json a cote, sans rien
+  activer.
+- Detection automatique des Releases ou Tags GitHub pour l'affichage de version.
+- Mise a jour quotidienne par CRON : le moteur se met a jour tout seul.
+- 22 themes, mode sombre, mise en page adaptative.
+- Diagrammes Mermaid natifs, formules KaTeX, recherche plein texte.
+- Sommaire deroulant qui suit la lecture, barre de progression, tri par nom ou
+  par date de modification.
 
----
+Voir [docs/CONFIGURATION.md](docs/CONFIGURATION.md) pour les reglages et
+[docs/CONTENU.md](docs/CONTENU.md) pour la syntaxe d'ecriture.
 
 ## Quick Start
 
@@ -134,13 +140,17 @@ Use a square transparent PNG for best results.
 
 ## Local development
 
-The engine uses the GitHub API in production. Locally it falls back to a filesystem scan.
+Trois facons de travailler en local, au choix.
 
 ```bash
-python -m http.server 8000
+python -m http.server 8000          # apercu simple, listings du serveur
+node tools/build-index.mjs          # puis apercu hors ligne, mode static
+python tools/serve.py --vault .     # coffre Obsidian, index servi a la volee
 ```
 
-Open `http://localhost:8000`. Markdown files inside `wiki/docs/` are discovered automatically. Root Markdown files can be listed in `CONFIG.localRootMarkdown` for a fully offline preview; production discovers them through the GitHub API.
+Le mode `auto` choisit tout seul : index statique s'il existe, sinon detection
+selon le contexte. Les fichiers Markdown de `wiki/docs/` sont trouves
+automatiquement.
 
 `AcidWiki-Feature-Test.md` is a ready-made visual test page for Mermaid, KaTeX, tables, code, the animated theme, and long tables of contents.
 
@@ -155,6 +165,17 @@ Open `http://localhost:8000`. Markdown files inside `wiki/docs/` are discovered 
    <img alt="Star History Chart" src="https://api.star-history.com/chart?repos=infinition/AcidWiki&type=date&legend=top-left" />
  </picture>
 </a>
+
+---
+
+## Outillage
+
+```bash
+node tools/build-index.mjs      # construire l'index statique
+node tools/check-syntax.mjs     # verifier la syntaxe du moteur
+node tools/test-modules.mjs     # banc de test des modules
+python tools/serve.py --vault . # servir un coffre en local
+```
 
 ---
 
