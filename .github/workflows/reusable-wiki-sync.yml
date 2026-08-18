@@ -85,6 +85,13 @@ jobs:
             cp -a wiki/* _site/wiki/ || true
           fi
 
+          # 3a. Markdown pose a la racine du depot appelant (README et compagnie).
+          # Le moteur les lit d'abord sur raw.githubusercontent, mais les copier ici
+          # les rend visibles de l'index statique et sert de repli si raw tombe.
+          for f in *.md; do
+            [ -f "$f" ] && cp -f "$f" _site/ || true
+          done
+
           # 3b. Idem pour docs/, l'autre racine de contenu reconnue par le moteur.
           # Le moteur lit desormais le markdown depuis raw.githubusercontent, donc
           # cette copie n'est qu'un repli : elle sert la preview locale et le cas ou
@@ -105,87 +112,58 @@ jobs:
             mv _site/wiki/assets/logo.png _site/wiki/assets/logo-fallback.png
           fi
 
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
       - name: Dynamic Config Injection
-        working-directory: ./_site
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           REPO_FULL: ${{ github.repository }}
         run: |
-          CONFIG_FILE="wiki/config.js"
-          JSON_FILE="../.github/acidwiki.json"
-          MANIFEST_FILE="wiki/manifest.pwa.json"
-          
-          REPO_NAME=$(echo "$REPO_FULL" | awk -F '/' '{print $2}')
-          YEAR=$(date +'%Y')
-          
-          # --- SECURITE ANTI-CRASH JAVASCRIPT (Unexpected identifier 'message') ---
-          LATEST_TAG=$(gh api repos/$REPO_FULL/releases/latest --jq '.tag_name' 2>/dev/null || echo "")
-          if [[ "$LATEST_TAG" == *"message"* || "$LATEST_TAG" == *"{"* || "$LATEST_TAG" == "null" ]]; then
-            LATEST_TAG=""
-          fi
+          # La version affichee vient de la derniere release, a defaut du dernier
+          # tag. L'API renvoie un objet d'erreur quand il n'y a ni l'un ni l'autre :
+          # on ne garde que ce qui ressemble reellement a un numero de version, le
+          # generateur de configuration refuse le reste de toute facon.
+          LATEST_TAG=$(gh api "repos/$REPO_FULL/releases/latest" --jq '.tag_name' 2>/dev/null || echo "")
           if [ -z "$LATEST_TAG" ]; then
-            LATEST_TAG=$(gh api repos/$REPO_FULL/tags --jq '.[0].name' 2>/dev/null || echo "")
-            if [[ "$LATEST_TAG" == *"message"* || "$LATEST_TAG" == *"{"* || "$LATEST_TAG" == "null" ]]; then
-              LATEST_TAG=""
-            fi
+            LATEST_TAG=$(gh api "repos/$REPO_FULL/tags" --jq '.[0].name' 2>/dev/null || echo "")
           fi
-          
-          # --- LECTURE SECURISEE DU JSON ---
-          DISCORD=$(jq -r '.social.discord // empty' "$JSON_FILE" 2>/dev/null || echo "")
-          REDDIT=$(jq -r '.social.reddit // empty' "$JSON_FILE" 2>/dev/null || echo "")
-          COFFEE=$(jq -r '.buymeacoffee // empty' "$JSON_FILE" 2>/dev/null || echo "")
-          DEBUG_MODE=$(jq -r '.debug // "false"' "$JSON_FILE" 2>/dev/null || echo "false")
-          THEME=$(jq -r '.theme // empty' "$JSON_FILE" 2>/dev/null || echo "")
-          
-          # --- INJECTION ---
-          sed -i "s|projectName: \".*\"|projectName: \"${REPO_NAME^^}\"|g" $CONFIG_FILE
-          sed -i "s|projectSubtitle: \".*\"|projectSubtitle: \"${REPO_NAME^^} WIKI\"|g" $CONFIG_FILE
-          sed -i "s|description: \".*\"|description: \"Official Documentation and Wiki for ${REPO_NAME}\"|g" $CONFIG_FILE
-          sed -i "s|repo: \".*\"|repo: \"$REPO_FULL\"|g" $CONFIG_FILE
-          sed -i "s|footerText: \".*\"|footerText: \"© $YEAR ${REPO_NAME^^} WIKI - All rights reserved\"|g" $CONFIG_FILE
-          sed -i "s|github: \".*\"|github: \"https://github.com/$REPO_FULL\"|g" $CONFIG_FILE
-          sed -i "s|githubLabel: \".*\"|githubLabel: \"${REPO_NAME^^}\"|g" $CONFIG_FILE
-          sed -i "s|debug: false|debug: $DEBUG_MODE|g" $CONFIG_FILE
+          case "$LATEST_TAG" in
+            *message*|*'{'*|null) LATEST_TAG="" ;;
+          esac
 
-          # Theme par defaut du repo. On refuse silencieusement un id inconnu plutot
-          # que de livrer un wiki sans feuille de style : le moteur retomberait sur
-          # CONFIG.themes[0], ce qui masquerait la faute de frappe.
-          if [ -n "$THEME" ]; then
-            if grep -q "id: \"$THEME\"" $CONFIG_FILE; then
-              echo "🎨 Theme par defaut du repo : $THEME"
-              sed -i "s|defaultTheme: \".*\"|defaultTheme: \"$THEME\"|g" $CONFIG_FILE
-            else
-              echo "::warning::Theme \"$THEME\" inconnu dans acidwiki.json, theme par defaut conserve."
-            fi
-          fi
-          
-          # Gestion parfaite des variables nulles
-          if [ -n "$DISCORD" ] && [ "$DISCORD" != "null" ]; then sed -i "s|discord: .*|discord: \"$DISCORD\",|g" $CONFIG_FILE; else sed -i "s|discord: .*|discord: null,|g" $CONFIG_FILE; fi
-          if [ -n "$REDDIT" ] && [ "$REDDIT" != "null" ]; then sed -i "s|reddit: .*|reddit: \"$REDDIT\",|g" $CONFIG_FILE; else sed -i "s|reddit: .*|reddit: null,|g" $CONFIG_FILE; fi
-          if [ -n "$COFFEE" ] && [ "$COFFEE" != "null" ]; then sed -i "s|buyMeACoffee: .*|buyMeACoffee: \"$COFFEE\"|g" $CONFIG_FILE; else sed -i "s|buyMeACoffee: .*|buyMeACoffee: null|g" $CONFIG_FILE; fi
-          
-          sed -i "s|top: \[.*|top: [],|g" $CONFIG_FILE
-          sed -i "s|bottom: \[.*|bottom: []|g" $CONFIG_FILE
-          sed -i "s|type: \"github\"|type: \"local\"|g" $CONFIG_FILE
-          
-          CURRENT_DATE=$(date +'%Y-%m-%d')
-          sed -i "s|manualDate: \".*\"|manualDate: \"$CURRENT_DATE\"|g" $CONFIG_FILE
-          
-          if [ -n "$LATEST_TAG" ]; then
-            sed -i "s|manualVersion: \".*\"|manualVersion: \"$LATEST_TAG\"|g" $CONFIG_FILE
-          else
-            sed -i "s|manualVersion: \".*\"|manualVersion: \"\"|g" $CONFIG_FILE
-          fi
+          # Le gabarit est evalue puis reserialise. Les anciens sed operaient sur du
+          # JavaScript : une barre verticale ou un guillemet dans une URL de config
+          # produisait un fichier inanalysable, et le wiki se deployait vide.
+          node temp_engine/tools/apply-config.mjs \
+            --config .github/acidwiki.json \
+            --target _site/wiki/config.js \
+            --repo "$REPO_FULL" \
+            --version "$LATEST_TAG"
 
-          # CORRECTION ERREUR 404 LOGO PWA
+          # Manifeste PWA : nom du depot et icone reellement presente sur le site.
+          MANIFEST_FILE="_site/wiki/manifest.pwa.json"
+          REPO_NAME=$(echo "$REPO_FULL" | awk -F '/' '{print $2}')
           if [ -f "$MANIFEST_FILE" ]; then
-            jq --arg name "${REPO_NAME^^} WIKI" --arg short "$REPO_NAME" --arg icon "assets/logo.png" '
-              .name = $name | 
-              .short_name = $short | 
-              if .icons then (.icons[].src = $icon) else . end | 
+            jq --arg name "$(echo "$REPO_NAME" | tr '[:lower:]' '[:upper:]') WIKI" \
+               --arg short "$REPO_NAME" \
+               --arg icon "assets/logo.png" '
+              .name = $name |
+              .short_name = $short |
+              if .icons then (.icons[].src = $icon) else . end |
               if .shortcuts then (.shortcuts[].icons[].src = $icon) else . end
-            ' $MANIFEST_FILE > manifest.tmp && mv manifest.tmp $MANIFEST_FILE
+            ' "$MANIFEST_FILE" > manifest.tmp && mv manifest.tmp "$MANIFEST_FILE"
           fi
+
+      - name: Build static content index
+        run: |
+          # Sans index, chaque visiteur interroge l'API GitHub pour l'arborescence
+          # puis une fois par page pour la date de derniere edition : soixante
+          # requetes par heure et par adresse, plafond vite atteint. L'index est
+          # construit une fois ici et le site n'appelle plus rien.
+          node temp_engine/tools/build-index.mjs --root _site --out _site/wiki/index.json
 
       - name: Setup Pages
         uses: actions/configure-pages@v4
