@@ -2516,14 +2516,6 @@
 
                 if (found) {
                     loadContent(found.folder, found.title, found.file, false, found.folder === '');
-                    if (found.folder === '') STATE.expandedSections.add('__root__');
-                    const parts = found.folder.split('/').filter(Boolean);
-                    let current = "";
-                    parts.forEach(p => {
-                        current = current ? `${current}/${p}` : p;
-                        STATE.expandedSections.add(current);
-                    });
-                    renderSidebar();
                 } else {
                     loadDefault();
                 }
@@ -2716,6 +2708,25 @@
         }
 
         // --- 5. CONTENT LOADER (PERSISTENT CACHE OPTIMIZED) ---
+        function expandFolderHierarchy(folder) {
+            const ancestors = [];
+            if (!folder) {
+                ancestors.push('__root__');
+            } else {
+                const parts = folder.split('/').filter(Boolean);
+                let cur = '';
+                for (const part of parts) {
+                    cur = cur ? `${cur}/${part}` : part;
+                    ancestors.push(cur);
+                }
+            }
+            if (CONFIG.features.autoCollapseSidebar) {
+                STATE.expandedSections = new Set(ancestors);
+            } else {
+                ancestors.forEach(a => STATE.expandedSections.add(a));
+            }
+        }
+
         function getContentCacheKey(folder, filename) {
             return [STATE.wikiId || 'wiki', STATE.cacheVersion || 'dev', folder || 'root', filename].join('|');
         }
@@ -2919,11 +2930,7 @@
                     window.history.pushState({ folder, title, filename }, "", newUrl);
                 }
 
-                if (CONFIG.features.autoCollapseSidebar) {
-                    STATE.expandedSections = new Set([folder || '__root__']);
-                } else {
-                    STATE.expandedSections.add(folder || '__root__');
-                }
+                expandFolderHierarchy(folder);
                 renderSidebar();
 
                 // HIGHLIGHT LOGIC START
@@ -3434,7 +3441,7 @@
                         link.href = `?page=${fullPath}`;
 
                         const linkFolder = isRootFile ? '' : currentPath;
-                        const isActive = STATE.currentFolder === linkFolder && STATE.currentFilename === filename;
+                        const isActive = STATE.currentFolder === linkFolder && (STATE.currentFilename === filename || STATE.currentTitle === key);
                         link.className = `nav-link group flex items-center gap-3 px-2 py-1.5 rounded-md text-sm font-medium text-gray-400 hover:text-hack-heading hover:bg-hack-bg transition-all outline-none focus:bg-hack-bg ${isActive ? 'active' : ''}`;
 
                         link.innerHTML = `<span class="w-1.5 h-1.5 rounded-full bg-hack-border group-hover:bg-hack-green flex-shrink-0 transition-colors"></span> ${key}`;
@@ -3458,6 +3465,13 @@
             }
 
             lucide.createIcons();
+
+            const activeLink = container.querySelector('.nav-link.active');
+            if (activeLink) {
+                setTimeout(() => {
+                    activeLink.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+                }, 50);
+            }
         }
 
         // --- 7. SEARCH (MODAL VERSION) ---
