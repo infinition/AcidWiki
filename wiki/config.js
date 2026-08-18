@@ -20,6 +20,16 @@ const CONFIG = {
     repo: "infinition/AcidWiki",
     branch: "main",
 
+    // Strategie de decouverte du contenu. Ecrase par la cle "mode" de acidwiki.json.
+    //   "auto"   (defaut) index statique si present, sinon detection historique
+    //   "github" API GitHub uniquement
+    //   "local"  listings HTTP (python -m http.server, tools/serve.py) ; alias "vault"
+    //   "static" index wiki/index.json uniquement, hors ligne et sans API
+    mode: "auto",
+
+    // Emplacement de l'index statique produit par tools/build-index.mjs.
+    contentIndex: "wiki/index.json",
+
     // Theme Settings
     themes: [
         { id: "dark", name: "Dark Mode", file: "wiki/themes/dark.css", isDark: true },

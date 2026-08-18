@@ -1466,7 +1466,11 @@
             currentFilename: "",
             // Racine de contenu (wiki, docs, wiki/docs) retiree de l'arborescence
             // affichee mais reinjectee a chaque lecture de fichier.
-            contentPrefix: ""
+            contentPrefix: "",
+            // Strategie de decouverte du contenu effectivement retenue.
+            mode: "auto",
+            // Index statique (wiki/index.json) une fois charge, sinon null.
+            contentIndex: null
         };
 
         if (typeof CONFIG !== 'undefined') {
@@ -1552,7 +1556,9 @@
             // Feature Toggles
             const changelogBtn = document.getElementById('btn-versions');
             if (changelogBtn) {
-                changelogBtn.style.display = CONFIG.features.showChangelog ? 'flex' : 'none';
+                // Le changelog lit les releases GitHub : sans depot configure le bouton
+                // ouvrirait une page vide, on le masque plutot que de le laisser echouer.
+                changelogBtn.style.display = (CONFIG.features.showChangelog && CONFIG.repo) ? 'flex' : 'none';
             }
 
             const searchTrigger = document.querySelector('[onclick="openSearch()"]');
@@ -2102,6 +2108,83 @@
             return sorted;
         }
 
+        // --- MODES DE FONCTIONNEMENT ---
+        // Un wiki peut etre servi de quatre facons. Le mode se declare dans
+        // acidwiki.json ; "auto" conserve exactement l'ancien comportement, avec en
+        // plus une sonde de l'index statique qui rend le moteur utilisable hors ligne.
+        //
+        //   github  : arborescence lue via l'API GitHub (Pages, depot public)
+        //   local   : arborescence deduite des listings HTTP (python -m http.server,
+        //             ou tools/serve.py pour un coffre Obsidian) ; alias : vault
+        //   static  : arborescence lue dans wiki/index.json, aucun appel reseau tiers,
+        //             fonctionne hors ligne et depuis un fichier local
+        //   auto    : static si un index existe, sinon la detection historique
+        const CONTENT_MODES = ['auto', 'github', 'local', 'vault', 'static'];
+
+        function resolveMode() {
+            const declared = String(CONFIG.mode || 'auto').toLowerCase().trim();
+            if (!CONTENT_MODES.includes(declared)) {
+                console.warn('[AcidWiki] Unknown mode "' + declared + '", falling back to "auto".');
+                return 'auto';
+            }
+            return declared === 'vault' ? 'local' : declared;
+        }
+
+        function contentIndexUrl() {
+            return CONFIG.contentIndex || 'wiki/index.json';
+        }
+
+        // L'index statique porte l'arborescence, les fichiers de racine, le prefixe de
+        // contenu et une table de resolution des liens [[wiki]]. Il est produit par
+        // tools/build-index.mjs ou par tools/serve.py --build.
+        async function fetchWikiStructureFromIndex() {
+            try {
+                const res = await fetch('./' + contentIndexUrl(), { cache: 'no-cache' });
+                if (!res.ok) return null;
+                const raw = await res.text();
+                if (!raw || isHtmlDocumentText(raw)) return null;
+                const data = JSON.parse(raw);
+                if (!data || typeof data !== 'object' || !data.structure) return null;
+
+                STATE.contentIndex = data;
+                if (data.contentPrefix) STATE.contentPrefix = data.contentPrefix;
+                debugLog(`[AcidWiki] 📦 Static index loaded (${data.fileCount ?? '?'} files)`);
+                return { structure: data.structure, rootMdFiles: data.rootMdFiles || [], fromIndex: true };
+            } catch (error) {
+                debugLog('[AcidWiki] ℹ️ No usable static index.');
+                return null;
+            }
+        }
+
+        // Ordre des tentatives de decouverte pour le mode retenu. Le premier resultat
+        // exploitable gagne ; les suivants servent de repli, comme avant.
+        function discoveryChain(mode) {
+            const isLocalHost = /^(localhost|127\.0\.0\.1|\[::1\])$/.test(window.location.hostname);
+            const isFileUrl = window.location.protocol === 'file:';
+
+            if (mode === 'static') return [fetchWikiStructureFromIndex];
+            if (mode === 'github') return [fetchWikiStructureFromAPI, fetchWikiStructureFromIndex];
+            if (mode === 'local') return [scanLocalFilesystem, fetchWikiStructureFromIndex];
+
+            // auto : l'index statique d'abord car il est fiable partout et gratuit,
+            // puis la detection historique par nom d'hote, inchangee.
+            const historic = (isLocalHost || isFileUrl)
+                ? [scanLocalFilesystem, fetchWikiStructureFromAPI]
+                : [fetchWikiStructureFromAPI, scanLocalFilesystem];
+            return [fetchWikiStructureFromIndex, ...historic];
+        }
+
+        // Ce que le mode retenu sait faire. Sert a masquer une fonction plutot qu'a la
+        // laisser echouer : sans depot GitHub, ni changelog ni date de derniere edition.
+        function modeCapabilities() {
+            const hasRepo = Boolean(STATE.repo);
+            return {
+                releases: hasRepo,
+                lastUpdated: hasRepo || Boolean(STATE.contentIndex),
+                rawFetch: hasRepo
+            };
+        }
+
         // Les racines de contenu (wiki/, docs/) etaient exposees comme un dossier de
         // premier niveau : la barre laterale affichait "wiki > docs > 01_Intro" au lieu
         // de "01_Intro". On les retire de l'affichage et on garde le prefixe reel dans
@@ -2133,26 +2216,29 @@
                 debugLog('[AcidWiki] 🚀 Initializing wiki...');
                 updateSiteBranding(); // Mise à jour dynamique de l'image de marque
 
-                const isLocalPreview = /^(localhost|127\.0\.0\.1|\[::1\])$/.test(window.location.hostname);
-                let discoveryResult = isLocalPreview
-                    ? await scanLocalFilesystem()
-                    : await fetchWikiStructureFromAPI();
+                STATE.mode = resolveMode();
+                debugLog(`[AcidWiki] 🧭 Content mode: ${STATE.mode}${CONFIG.mode ? '' : ' (default)'}`);
 
-                if (!discoveryResult) {
+                let discoveryResult = null;
+                for (const discover of discoveryChain(STATE.mode)) {
+                    discoveryResult = await discover();
+                    if (discoveryResult) break;
                     debugLog('[AcidWiki] 🔄 Trying alternate content discovery...');
-                    discoveryResult = isLocalPreview
-                        ? await fetchWikiStructureFromAPI()
-                        : await scanLocalFilesystem();
                 }
 
                 let structure = discoveryResult && (discoveryResult.structure ?? discoveryResult);
                 const rootMdFiles = (discoveryResult && discoveryResult.rootMdFiles) || [];
 
                 if (structure && typeof structure === 'object' && !Array.isArray(structure)) {
-                    const flattened = flattenContentRoot(structure);
-                    structure = sortWikiStructure(flattened.structure);
-                    STATE.contentPrefix = flattened.prefix;
-                    if (flattened.prefix) debugLog(`[AcidWiki] 📁 Content root hidden from nav: ${flattened.prefix}/`);
+                    if (discoveryResult && discoveryResult.fromIndex) {
+                        // L'index statique est deja aplati a la construction.
+                        structure = sortWikiStructure(structure);
+                    } else {
+                        const flattened = flattenContentRoot(structure);
+                        structure = sortWikiStructure(flattened.structure);
+                        STATE.contentPrefix = flattened.prefix;
+                        if (flattened.prefix) debugLog(`[AcidWiki] 📁 Content root hidden from nav: ${flattened.prefix}/`);
+                    }
                 } else {
                     structure = null;
                 }
@@ -2611,7 +2697,7 @@
                 });
             });
 
-            if (CONFIG.features.showChangelog && STATE.repo) {
+            if (CONFIG.features.showChangelog && modeCapabilities().releases) {
                 jobs.push(async () => {
                     const res = await fetch(`https://api.github.com/repos/${STATE.repo}/releases`);
                     if (!res.ok) return;
@@ -3052,6 +3138,21 @@
         async function fetchLastUpdated(folder, filename) {
             if (CONFIG.versioning.type === 'local') {
                 document.getElementById('last-updated').textContent = `${CONFIG.ui.lastUpdatedText}: ${CONFIG.versioning.manualDate}`;
+                return;
+            }
+
+            const label = document.getElementById('last-updated');
+
+            // L'index statique porte la date de modification du fichier : aucune requete.
+            const indexedPath = getRepoPath(folder, filename, !folder);
+            const indexedDate = STATE.contentIndex && STATE.contentIndex.mtimes && STATE.contentIndex.mtimes[indexedPath];
+            if (indexedDate) {
+                label.textContent = `${CONFIG.ui.lastUpdatedText}: ${new Date(indexedDate).toLocaleDateString()}`;
+                return;
+            }
+
+            if (!modeCapabilities().lastUpdated || !STATE.repo) {
+                label.textContent = '';
                 return;
             }
 
