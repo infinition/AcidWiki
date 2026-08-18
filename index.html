@@ -1744,22 +1744,26 @@
             applyTheme(getStoredThemeId() || CONFIG.defaultTheme);
         }
 
+        // Pose la feuille de style d'un theme sans rien memoriser. Sert a la fois a
+        // l'application definitive et a l'apercu au survol.
+        function paintTheme(theme) {
+            const html = document.documentElement;
+            document.getElementById('theme-link').href = theme.file;
+            html.dataset.theme = theme.id;
+            html.classList.toggle('dark', Boolean(theme.isDark));
+            html.classList.toggle('light', !theme.isDark);
+        }
+
         function applyTheme(themeId) {
             const theme = CONFIG.themes.find(t => t.id === themeId) || CONFIG.themes[0];
-            const html = document.documentElement;
-            const themeLink = document.getElementById('theme-link');
 
-            themeLink.href = theme.file;
-            html.dataset.theme = theme.id;
+            // Une application definitive annule l'apercu en cours, sinon la sortie du
+            // survol restaurerait le theme precedent par-dessus le nouveau choix.
+            themePreview.pending = null;
+            themePreview.active = null;
+            clearTimeout(themePreview.timer);
 
-            if (theme.isDark) {
-                html.classList.add('dark');
-                html.classList.remove('light');
-            } else {
-                html.classList.add('light');
-                html.classList.remove('dark');
-            }
-
+            paintTheme(theme);
             try { localStorage.setItem(themeStorageKey(), theme.id); } catch (_) {}
             lucide.createIcons();
 
@@ -1767,6 +1771,38 @@
             if (STATE && STATE.wikiData && Object.keys(STATE.wikiData).length > 0) {
                 showToast(`${CONFIG.ui.themeChangedText}${theme.name}`);
             }
+        }
+
+        // --- APERCU AU SURVOL ---
+        // La feuille de style n'est demandee qu'au moment du survol : ouvrir le menu
+        // ne telecharge rien, et un theme jamais survole n'est jamais charge. Le
+        // navigateur garde ensuite le fichier en cache, les survols suivants sont
+        // instantanes. Un delai court evite d'enchainer vingt-deux chargements quand
+        // le pointeur ne fait que traverser la liste.
+        const themePreview = { timer: null, pending: null, active: null, delay: 140 };
+
+        function previewTheme(themeId) {
+            if (CONFIG.features.themeHoverPreview === false) return;
+            if (themePreview.active === themeId) return;
+
+            clearTimeout(themePreview.timer);
+            themePreview.pending = themeId;
+            themePreview.timer = setTimeout(() => {
+                if (themePreview.pending !== themeId) return;
+                const theme = CONFIG.themes.find(t => t.id === themeId);
+                if (!theme) return;
+                themePreview.active = themeId;
+                paintTheme(theme);
+            }, themePreview.delay);
+        }
+
+        function cancelThemePreview() {
+            clearTimeout(themePreview.timer);
+            themePreview.pending = null;
+            if (!themePreview.active) return;
+            themePreview.active = null;
+            const current = CONFIG.themes.find(t => t.id === (getStoredThemeId() || CONFIG.defaultTheme));
+            if (current) paintTheme(current);
         }
 
         // --- THEME PICKER ---
@@ -1796,9 +1832,14 @@
                     applyTheme(theme.id);
                     closeThemeMenu(true);
                 };
+                // Le clavier declenche le meme apercu que la souris : la navigation
+                // par tabulation donne acces a la fonction, pas seulement le pointeur.
+                option.addEventListener('mouseenter', () => previewTheme(theme.id));
+                option.addEventListener('focus', () => previewTheme(theme.id));
                 themeMenuList.appendChild(option);
             });
 
+            themeMenuList.addEventListener('mouseleave', cancelThemePreview);
             lucide.createIcons();
         }
 
@@ -1862,6 +1903,9 @@
 
         function closeThemeMenu(restoreFocus = false) {
             if (!themeMenu.classList.contains('open')) return;
+            // Fermer sans choisir remet le theme en cours : un apercu ne doit jamais
+            // survivre au menu qui l'a declenche.
+            cancelThemePreview();
             themeMenu.classList.remove('open');
             themeMenu.setAttribute('aria-hidden', 'true');
             if (themeMenuAnchor) {
@@ -3802,6 +3846,14 @@
                     if (isRootSection && typeof value === 'object' && value !== null) {
                         const folderPath = '__root__';
                         if (searchResults && !searchResults['__root__']) return;
+
+                        // Une rubrique repliable pour un unique README coute un clic et
+                        // une ligne d'en-tete pour rien. Par defaut les fichiers de la
+                        // racine sont poses directement en tete de la navigation.
+                        if (!CONFIG.features.groupRootFiles) {
+                            renderRecursive(value, parentContainer, folderPath, level);
+                            return;
+                        }
 
                         const group = document.createElement('div');
                         group.className = `nav-group mb-1 ${level > 0 ? 'ml-2' : ''}`;

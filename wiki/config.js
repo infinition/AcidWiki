@@ -74,6 +74,13 @@ const CONFIG = {
         autoCollapseSidebar: false,
         stickyBreadcrumbs: true,
         showRootReadme: true,
+        // Regrouper les markdown de la racine sous une rubrique repliable
+        // (ancien comportement, intitule par ui.rootReadmeTitle). A false, ils
+        // apparaissent directement en tete de la navigation.
+        groupRootFiles: false,
+        // Apercu du theme au survol de son nom dans le selecteur. La feuille de
+        // style n'est demandee qu'au survol, jamais a l'ouverture du menu.
+        themeHoverPreview: true,
         searchIndexConcurrency: 8,
         allowIframes: false,
         // Ordre de la navigation : "name" (tri naturel) ou "date" (recents en tete,

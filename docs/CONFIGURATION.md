@@ -74,8 +74,23 @@ quand ils ne sont pas declares.
 | `autoCollapseSidebar` | `false` | ne garder qu'une rubrique ouverte a la fois |
 | `stickyBreadcrumbs` | `true` | fil d'Ariane colle en haut |
 | `showRootReadme` | `true` | README du depot en page d'accueil |
+| `groupRootFiles` | `false` | regrouper les markdown de la racine sous une rubrique repliable ; a `false` ils sont poses directement en tete de navigation |
+| `themeHoverPreview` | `true` | apercu du theme au survol de son nom dans le selecteur |
 | `searchIndexConcurrency` | `8` | requetes simultanees pendant l'indexation |
 | `debug` | `false` | journal detaille dans la console |
+
+## Apercu des themes
+
+Survoler le nom d'un theme dans le selecteur l'applique immediatement a la page.
+Sortir de la liste ou fermer le menu remet le theme en cours, seul un clic
+engage le changement.
+
+La feuille de style n'est demandee qu'au moment du survol : ouvrir le menu ne
+telecharge rien, et un theme jamais survole n'est jamais charge. Un court delai
+avant l'application evite d'enchainer les chargements quand le pointeur ne fait
+que traverser la liste. Le clavier declenche le meme apercu au passage du focus.
+
+Reglable par `features.themeHoverPreview`.
 
 ## Index statique
 
