@@ -107,6 +107,18 @@ check('bloc math compacte',
     run('$$\na = b\n\n+ c\n$$'), (v) => v.includes('$$a = b\n+ c$$'));
 check('image relative reroutee',
     run('![vue](../_assets/schema.png)'), (v) => v.includes('](./wiki/docs/_assets/schema.png)'));
+// Cas rencontres tels quels dans un vrai coffre : la syntaxe [[ ]] de bash et les
+// tableaux imbriques de JavaScript ne sont pas des liens de coffre.
+check('test bash [[ ]] preserve dans un bloc',
+    run('```bash\nif [[ -d $PYENV_ROOT/bin ]]; then echo ok; fi\n```'),
+    (v) => v.includes('[[ -d $PYENV_ROOT/bin ]]') && !v.includes('acid-missing-link'));
+check('tableau imbrique preserve dans un bloc',
+    run('```js\nconst m = [[1, 2], [3, 4]];\n```'), (v) => v.includes('[[1, 2], [3, 4]]'));
+check('lien vers un media resolu en lien simple',
+    run('[[demo.mp4]]'), '[demo.mp4](./wiki/docs/_assets/demo.mp4)');
+check('chemin partiel resolu par le nom de fichier',
+    run('[[02_Cours/Voisin]]'), '[02_Cours/Voisin](?page=02_Cours/Voisin.md)');
+
 check('markdown ordinaire inchange',
     run('# Titre\n\nUn [lien](https://exemple.org) et du **gras**.'),
     '# Titre\n\nUn [lien](https://exemple.org) et du **gras**.');

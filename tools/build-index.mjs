@@ -23,7 +23,7 @@ const engineRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 // Dossiers jamais parcourus. Reprend la liste du serveur local pour que les deux
 // outils voient exactement le meme contenu.
 const SKIP_DIRS = new Set([
-    '.git', '.github', '.obsidian', '.trash', '.smart-env', '.agents',
+    '.git', '.github', '_github', '.obsidian', '.trash', '.smart-env', '.agents',
     '__pycache__', 'node_modules', '_build', '_wiki', 'tools',
     '.vscode', '.idea', 'venv', '.venv'
 ]);

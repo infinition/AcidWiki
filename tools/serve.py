@@ -4,13 +4,16 @@ Serveur universel pour les wikis de cours Nephystos (AcidWiki).
 Partage par l'ensemble des academies (ML Academy, CG Academy, Cyber Hackademy, Science Academy).
 """
 
+import datetime
 import html
+import json
 import mimetypes
 import os
 import re
 import socket
 import sys
 import threading
+import time
 import urllib.parse
 import webbrowser
 import argparse
@@ -20,13 +23,23 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 # Parametres et detection de l'environnement
 # --------------------------------------------------------------------------
 
-ENGINE_DIR = os.path.dirname(os.path.abspath(__file__))
+# Le script vit dans tools/ mais le moteur est un cran au-dessus : index.html et
+# wiki/ sont a la racine du depot. On remonte tant que index.html n'est pas la.
+_here = os.path.dirname(os.path.abspath(__file__))
+ENGINE_DIR = _here if os.path.isfile(os.path.join(_here, "index.html")) else os.path.dirname(_here)
 WIKI_DIR = ENGINE_DIR
 
 parser = argparse.ArgumentParser(description="Universal Academy Wiki Server")
 parser.add_argument("--vault", default=None, help="Path to the Academy Vault folder")
 parser.add_argument("--port", type=int, default=None, help="Port to listen on")
 parser.add_argument("--no-browser", action="store_true", help="Do not open browser automatically")
+parser.add_argument("--legacy-translate", action="store_true",
+                    help="Traduire la syntaxe Obsidian cote serveur (ancien comportement). "
+                         "Par defaut le moteur s'en charge, ce qui donne le meme rendu en local "
+                         "et une fois publie.")
+parser.add_argument("--build", metavar="DOSSIER", nargs="?", const=".", default=None,
+                    help="Ecrire index.json et index-links.json dans le dossier indique "
+                         "(defaut : le coffre) puis quitter, sans demarrer de serveur.")
 args, _ = parser.parse_known_args()
 
 if args.vault:
@@ -268,6 +281,13 @@ def get_markdown(full_path):
             raw = f.read()
     except OSError:
         return None
+
+    # Par defaut le fichier part tel quel : le moteur porte desormais la meme
+    # traduction Obsidian, et la faire ici donnerait un rendu local different du
+    # rendu publie. --legacy-translate restaure l'ancien comportement.
+    if not args.legacy_translate:
+        return raw.encode("utf-8")
+
     rel = os.path.relpath(full_path, VAULT).replace("\\", "/")
     translated = translate_markdown(raw, rel)
     return translated.encode("utf-8")
@@ -307,6 +327,149 @@ def build_listing(fs_dir, url_prefix):
         elif name.lower().endswith(".md") and not racine:
             entries.append((f"{url_prefix}{name}", name))
     return entries
+
+# --------------------------------------------------------------------------
+# Index statique
+# --------------------------------------------------------------------------
+
+# Meme format que tools/build-index.mjs : le moteur ne fait aucune difference
+# entre un index produit a la construction et un index servi a la volee.
+
+ASSET_EXT = IMG_EXT | VID_EXT | AUD_EXT | {".pdf", ".csv", ".zip", ".ipynb", ".txt"}
+SIDECAR_SUFFIXES = [".quiz.json", ".quizz.json", ".cards.json", ".flashcards.json"]
+
+# HIDDEN_DIRS masque des dossiers dans la navigation, ce qui est un choix
+# d'affichage. L'index, lui, doit voir les pieces jointes : _assets et videos y
+# vivent justement, et un ![[schema.png]] qui les cible doit se resoudre. Seuls
+# les dossiers techniques sont donc reellement sautes.
+INDEX_SKIP_DIRS = {
+    ".git", ".github", "_github", ".obsidian", ".trash", ".smart-env", ".agents",
+    "__pycache__", "node_modules", "_build", "_wiki", ".vscode", ".idea",
+}
+
+# Le parcours d'un coffre pose sur un disque reseau prend plusieurs secondes.
+# Le moteur demande l'index a chaque rechargement complet, on garde donc le
+# dernier resultat un court instant. ?fresh=1 force la reconstruction.
+INDEX_CACHE_TTL = 10.0
+_index_cache = {"built_at": 0.0, "index": None, "links": None}
+
+
+def build_static_index():
+    structure = {}
+    root_md = []
+    mtimes = {}
+    sidecars = {}
+    lookup = {}
+    paths = []
+    path_ids = {}
+    file_count = 0
+
+    def path_id(rel):
+        if rel not in path_ids:
+            path_ids[rel] = len(paths)
+            paths.append(rel)
+        return path_ids[rel]
+
+    def add_lookup(key, rel):
+        if not key:
+            return
+        normalized = key.strip().lower().replace("\\", "/")
+        if normalized not in lookup:
+            lookup[normalized] = path_id(rel)
+
+    def descend(directory, node):
+        nonlocal file_count
+        try:
+            names = sorted(os.listdir(directory), key=lambda n: n.lower())
+        except OSError:
+            return
+
+        for name in names:
+            if name.startswith("."):
+                continue
+            full = os.path.join(directory, name)
+            rel = os.path.relpath(full, VAULT).replace("\\", "/")
+
+            if os.path.isdir(full):
+                if name in INDEX_SKIP_DIRS:
+                    continue
+                child = {}
+                descend(full, child)
+                if child:
+                    node[name] = child
+                continue
+
+            stem, ext = os.path.splitext(name)
+            ext = ext.lower()
+
+            if ext == ".md":
+                # A la racine du coffre, un markdown est une page d'accueil et non
+                # une entree de navigation : la passe suivante les reprend.
+                if os.path.normpath(directory) != os.path.normpath(VAULT):
+                    node[stem.replace("_", " ")] = name
+                    file_count += 1
+                    found = [suffix for suffix in SIDECAR_SUFFIXES
+                             if os.path.isfile(os.path.join(directory, stem + suffix))]
+                    if found:
+                        sidecars[rel] = found
+                try:
+                    mtimes[rel] = datetime.datetime.fromtimestamp(
+                        os.path.getmtime(full), datetime.timezone.utc).isoformat()
+                except OSError:
+                    pass
+            elif ext not in ASSET_EXT:
+                continue
+
+            add_lookup(rel, rel)
+            add_lookup(name, rel)
+            add_lookup(stem, rel)
+
+    descend(VAULT, structure)
+
+    for name in sorted(os.listdir(VAULT), key=lambda n: n.lower()):
+        full = os.path.join(VAULT, name)
+        if not os.path.isfile(full) or not name.lower().endswith(".md"):
+            continue
+        root_md.append({"title": os.path.splitext(name)[0].replace("_", " "), "filename": name})
+
+    root_md.sort(key=lambda entry: (entry["filename"].lower() != "readme.md", entry["filename"].lower()))
+
+    index = {
+        "generated": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+        "contentPrefix": "",
+        "fileCount": file_count,
+        "structure": structure,
+        "rootMdFiles": root_md,
+        "mtimes": mtimes,
+        "sidecars": sidecars,
+        "linksFile": "index-links.json",
+    }
+    links = {"paths": paths, "lookup": lookup}
+    return index, links
+
+
+def cached_static_index(force=False):
+    now = time.monotonic()
+    if not force and _index_cache["index"] is not None and (now - _index_cache["built_at"]) < INDEX_CACHE_TTL:
+        return _index_cache["index"], _index_cache["links"]
+
+    started = time.monotonic()
+    index, links = build_static_index()
+    _index_cache.update({"built_at": time.monotonic(), "index": index, "links": links})
+    print(f"[index] {index['fileCount']} pages en {time.monotonic() - started:.1f}s")
+    return index, links
+
+
+def write_static_index(destination):
+    index, links = build_static_index()
+    os.makedirs(destination, exist_ok=True)
+    for name, payload in (("index.json", index), ("index-links.json", links)):
+        target = os.path.join(destination, name)
+        with open(target, "w", encoding="utf-8") as handle:
+            json.dump(payload, handle, ensure_ascii=False)
+        print(f"  {target}  ({os.path.getsize(target) / 1024:.0f} Ko)")
+    print(f"  {index['fileCount']} pages, {len(links['lookup'])} resolutions")
+
 
 # --------------------------------------------------------------------------
 # HTTP Server Handler
@@ -392,6 +555,15 @@ class Handler(BaseHTTPRequestHandler):
 
         while path.startswith("/wiki/wiki/"):
             path = path[5:]
+
+        # 0. Index statique reconstruit a chaque appel : le coffre est edite pendant
+        #    que le serveur tourne, un index fige serait faux des la premiere note.
+        if path in ("/wiki/index.json", "/wiki/index-links.json"):
+            fresh = "fresh=1" in (urllib.parse.urlparse(self.path).query or "")
+            index, links = cached_static_index(force=fresh)
+            payload = index if path.endswith("/index.json") else links
+            data = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+            return self._send(data, "application/json; charset=utf-8")
 
         # 1. Override config.js with local vault configuration
         if path == "/wiki/config.js":
@@ -498,13 +670,24 @@ class Handler(BaseHTTPRequestHandler):
         return self._not_found()
 
 def main():
+    if args.build is not None:
+        destination = VAULT if args.build == "." else os.path.abspath(args.build)
+        print(f"Index du coffre : {VAULT}")
+        write_static_index(destination)
+        return
+
     print("=" * 60)
-    print("      NEPHYSTOS ACADEMY WIKI - MOTEUR UNIFIÉ")
+    print("      ACIDWIKI - SERVEUR LOCAL UNIFIÉ")
     print("=" * 60)
     print(f"  Coffre (Vault) : {VAULT}")
     print(f"  Moteur (Core)  : {ENGINE_DIR}")
     print(f"  URL Locale     : http://127.0.0.1:{PORT}")
+    print(f"  Traduction     : {'serveur (legacy)' if args.legacy_translate else 'moteur'}")
     print("=" * 60)
+
+    # Premier parcours ici plutot qu'a la premiere requete : la page ne reste pas
+    # bloquee plusieurs secondes sur un coffre pose sur un disque reseau.
+    cached_static_index(force=True)
 
     server = ThreadingHTTPServer(("127.0.0.1", PORT), Handler)
     if not args.no_browser:
