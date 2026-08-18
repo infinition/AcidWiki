@@ -35,6 +35,7 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <link rel="manifest" id="manifest-link" href="wiki/manifest.pwa.json">
 
+    <script src="wiki/themes.js"></script>
     <script src="wiki/config.js"></script>
 
     <link id="theme-link" rel="stylesheet" href="">
@@ -140,39 +141,67 @@
 
         /* --- HIGHLIGHT ANIMATION --- */
         @keyframes highlight-pulse {
-            0% {
-                background-color: rgba(34, 197, 94, 0.8);
-                color: black;
-                transform: scale(1.05);
-                box-shadow: 0 0 10px rgba(34, 197, 94, 0.5);
-            }
-
-            25% {
-                background-color: rgba(34, 197, 94, 0.3);
-                color: inherit;
-                transform: scale(1);
-            }
-
-            50% {
-                background-color: rgba(34, 197, 94, 0.8);
-                color: black;
-                transform: scale(1.05);
-            }
-
-            100% {
-                background-color: rgba(34, 197, 94, 0.2);
-                color: inherit;
-                transform: scale(1);
-            }
+            0%   { transform: scale(1.14); box-shadow: 0 0 0 3px var(--match-halo), 0 0 22px 6px var(--match-halo); }
+            40%  { transform: scale(1);    box-shadow: 0 0 0 0   var(--match-halo), 0 0 0 0 var(--match-halo); }
+            70%  { transform: scale(1.08); box-shadow: 0 0 0 3px var(--match-halo), 0 0 18px 4px var(--match-halo); }
+            100% { transform: scale(1);    box-shadow: var(--match-shadow); }
         }
 
+        /* Surlignage des resultats de recherche.
+           L'ancienne version peignait un vert a 20 pour cent d'opacite en gardant la
+           couleur du texte : sur un theme sombre le resultat etait a peine perceptible,
+           et sur un theme clair a fond colore il disparaissait. On pose donc une couleur
+           pleine et une couleur de texte imposee, independantes du theme, plutot qu'une
+           teinte qui depend de ce qu'il y a dessous. Le jaune reste lisible sur fond
+           clair comme sur fond sombre, c'est la convention de la recherche dans la page. */
         mark.search-match {
-            animation: highlight-pulse 1.5s ease-in-out;
-            background-color: rgba(34, 197, 94, 0.2);
-            color: inherit;
-            border-radius: 4px;
-            padding: 0 2px;
-            display: inline-block;
+            --match-bg: #ffd60a;
+            --match-ink: #14161a;
+            --match-halo: rgba(255, 214, 10, 0.45);
+            --match-shadow: 0 0 0 1px rgba(0, 0, 0, 0.45), 0 1px 6px rgba(0, 0, 0, 0.3);
+
+            background: var(--match-bg);
+            color: var(--match-ink);
+            font-weight: 700;
+            border-radius: 3px;
+            padding: 0 3px;
+            margin: 0 -1px;
+            box-shadow: var(--match-shadow);
+            animation: highlight-pulse 1.6s ease-in-out;
+        }
+
+        /* Sur fond sombre, un halo lumineux fait ressortir la pastille ; sur fond
+           clair, c'est le liset sombre qui la detache. */
+        html.dark mark.search-match {
+            --match-shadow: 0 0 0 1px rgba(0, 0, 0, 0.5), 0 0 14px rgba(255, 214, 10, 0.5);
+        }
+
+        html.light mark.search-match {
+            --match-shadow: 0 0 0 1px rgba(20, 22, 26, 0.55), 0 1px 4px rgba(20, 22, 26, 0.22);
+        }
+
+        /* Occurrence courante, celle vers laquelle la page a defile. */
+        mark.search-match.is-current {
+            --match-bg: #ff7a18;
+            /* Encre sombre et non creme : sur cet orange, un texte clair tombe a
+               2,5 pour 1, en dessous du seuil de lisibilite, alors que l'encre
+               sombre monte a 7,2 pour 1. C'est l'occurrence vers laquelle la page
+               a defile, donc celle qui doit se lire le mieux. */
+            --match-ink: #14161a;
+            --match-halo: rgba(255, 122, 24, 0.55);
+            --match-shadow: 0 0 0 2px rgba(255, 122, 24, 0.55), 0 0 16px rgba(255, 122, 24, 0.45);
+        }
+
+        mark.search-match a,
+        mark.search-match code,
+        mark.search-match strong,
+        mark.search-match em {
+            color: inherit !important;
+            background: none !important;
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+            mark.search-match { animation: none; }
         }
 
         /* --- MICRO-INTERACTIONS --- */
@@ -697,6 +726,37 @@
         }
 
         /* --- CLEAR HIGHLIGHT BTN (NEW) --- */
+        /* Bouton tout deplier / tout replier, aligne sur la hauteur du champ de
+           recherche voisin et volontairement discret : il ne doit pas concurrencer
+           la recherche du regard. */
+        #toggle-all-btn {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 30px;
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+            background: color-mix(in srgb, var(--bg-body) 50%, transparent);
+            /* Aucun theme ne declare de couleur attenuee : on derive celle du corps
+               de texte, qui existe partout, plutot que de figer un gris qui
+               deviendrait illisible sur un theme a fort contraste. */
+            color: var(--text-main);
+            opacity: 0.55;
+            cursor: pointer;
+            transition: color 140ms ease, border-color 140ms ease, opacity 140ms ease;
+        }
+
+        #toggle-all-btn:hover {
+            color: var(--accent-green);
+            border-color: var(--accent-green);
+            opacity: 1;
+        }
+
+        #toggle-all-btn:focus-visible {
+            outline: 2px solid var(--accent-green);
+            outline-offset: 1px;
+        }
+
         #clear-highlight-btn {
             position: absolute;
             bottom: 6rem;
@@ -1217,13 +1277,18 @@
                 </div>
             </div>
 
-            <div class="mt-4 relative group cursor-pointer" onclick="openSearch()">
-                <i data-lucide="search" class="absolute left-2.5 top-2.5 w-4 h-4 text-gray-500"></i>
-                <div
-                    class="w-full border border-hack-border rounded py-1.5 pl-8 pr-3 text-xs text-gray-500 bg-hack-bg/50 flex justify-between items-center">
-                    <span>Search...</span>
-                    <span class="text-[10px] opacity-50 border border-hack-border px-1 rounded">Ctrl+K</span>
+            <div class="mt-4 flex items-stretch gap-1.5">
+                <div id="search-trigger-desktop" class="relative group cursor-pointer flex-1 min-w-0" onclick="openSearch()">
+                    <i data-lucide="search" class="absolute left-2.5 top-2.5 w-4 h-4 text-gray-500"></i>
+                    <div
+                        class="w-full border border-hack-border rounded py-1.5 pl-8 pr-3 text-xs text-gray-500 bg-hack-bg/50 flex justify-between items-center">
+                        <span>Search...</span>
+                        <span class="text-[10px] opacity-50 border border-hack-border px-1 rounded">Ctrl+K</span>
+                    </div>
                 </div>
+                <button id="toggle-all-btn" type="button" class="shrink-0" title="Tout deplier" aria-label="Tout deplier">
+                    <i data-lucide="chevrons-down-up" class="w-4 h-4"></i>
+                </button>
             </div>
         </div>
 
@@ -1478,6 +1543,14 @@
         };
 
         if (typeof CONFIG !== 'undefined') {
+            // Catalogue de themes par defaut. Il vit dans wiki/themes.js, genere a
+            // partir des fichiers reellement presents, et suit donc le moteur dans
+            // chaque deploiement. Une configuration qui declare sa propre liste
+            // restreint volontairement le choix et garde la main.
+            if (!Array.isArray(CONFIG.themes) || !CONFIG.themes.length) {
+                CONFIG.themes = window.ACIDWIKI_THEMES || [];
+            }
+
             STATE.repo = CONFIG.repo;
             STATE.branch = CONFIG.branch;
             STATE.cacheVersion = [CONFIG.branch, CONFIG.versioning?.manualVersion, CONFIG.versioning?.manualDate].filter(Boolean).join('|') || 'dev';
@@ -1565,7 +1638,10 @@
                 changelogBtn.style.display = (CONFIG.features.showChangelog && CONFIG.repo) ? 'flex' : 'none';
             }
 
-            const searchTrigger = document.querySelector('[onclick="openSearch()"]');
+            // querySelector renvoyait le bouton mobile, declare plus haut dans le
+            // document : le champ de recherche du bandeau lateral restait visible
+            // meme avec showSearch a false.
+            const searchTrigger = document.getElementById('search-trigger-desktop');
             if (searchTrigger) {
                 searchTrigger.style.display = CONFIG.features.showSearch ? 'block' : 'none';
             }
@@ -2460,6 +2536,7 @@
                 invalidateVaultLookup();
                 configureObsidianLayer();
                 installReadingProgress();
+                document.getElementById('toggle-all-btn')?.addEventListener('click', toggleAllSections);
                 if (STATE.rootMdFiles.length > 0) {
                     const rootObj = Object.fromEntries(STATE.rootMdFiles.map(f => [f.title, f.filename]));
                     STATE.wikiData = { __root__: rootObj, ...structure };
@@ -3347,15 +3424,7 @@
                     highlightAndScroll(highlightQuery);
                     clearHighlightBtn.classList.remove('hidden');
 
-                    // Setup Clear Button Action
-                    clearHighlightBtn.onclick = () => {
-                        const marks = viewer.querySelectorAll('mark.search-match');
-                        marks.forEach(mark => {
-                            const text = document.createTextNode(mark.textContent);
-                            mark.parentNode.replaceChild(text, mark);
-                        });
-                        clearHighlightBtn.classList.add('hidden');
-                    };
+                    clearHighlightBtn.onclick = () => clearSearchHighlights();
                     lucide.createIcons();
                 } else if (window.location.hash) {
                     const el = document.getElementById(window.location.hash.substring(1));
@@ -3382,6 +3451,24 @@
             }
         }
 
+        // Retire les surlignages et rend son texte au document. Appelee par le bouton
+        // dedie et par la touche Echap, qui doivent faire exactement la meme chose.
+        function clearSearchHighlights() {
+            const viewer = document.getElementById('markdown-viewer');
+            const marks = viewer.querySelectorAll('mark.search-match');
+            if (!marks.length) return false;
+
+            marks.forEach(mark => {
+                mark.parentNode.replaceChild(document.createTextNode(mark.textContent), mark);
+            });
+            // Les noeuds de texte voisins restent separes apres remplacement, ce qui
+            // gene une recherche ulterieure : on les recolle.
+            viewer.normalize();
+
+            document.getElementById('clear-highlight-btn')?.classList.add('hidden');
+            return true;
+        }
+
         // NEW FUNCTION: Highlight and scroll to text
         function highlightAndScroll(query) {
             if (!query) return;
@@ -3406,6 +3493,7 @@
                     // Find the mark we just created inside this span
                     if (!firstMatch) {
                         firstMatch = span.querySelector('.search-match');
+                        firstMatch?.classList.add('is-current');
                     }
                 }
             }
@@ -3830,6 +3918,56 @@
         }
 
         // --- 6. SIDEBAR ---
+        // --- TOUT DEPLIER / TOUT REPLIER ---
+        // Les chemins sont construits comme dans expandFolderHierarchy : une rubrique
+        // imbriquee est identifiee par son chemin complet, pas par son seul nom.
+        function collectFolderPaths(data = STATE.wikiData, prefix = '') {
+            const paths = [];
+            for (const [key, value] of Object.entries(data || {})) {
+                if (typeof value !== 'object' || value === null) continue;
+                if (key === '__root__') {
+                    // Pose a plat, la racine n'est pas une rubrique repliable.
+                    if (CONFIG.features.groupRootFiles) paths.push('__root__');
+                    continue;
+                }
+                const path = prefix ? `${prefix}/${key}` : key;
+                paths.push(path, ...collectFolderPaths(value, path));
+            }
+            return paths;
+        }
+
+        function allSectionsExpanded() {
+            const paths = collectFolderPaths();
+            return paths.length > 0 && paths.every(path => STATE.expandedSections.has(path));
+        }
+
+        function toggleAllSections() {
+            const paths = collectFolderPaths();
+            if (!paths.length) return;
+
+            if (allSectionsExpanded()) STATE.expandedSections.clear();
+            else paths.forEach(path => STATE.expandedSections.add(path));
+
+            renderSidebar();
+        }
+
+        // L'icone et l'intitule annoncent l'action a venir, pas l'etat courant.
+        function refreshToggleAllButton() {
+            const btn = document.getElementById('toggle-all-btn');
+            if (!btn) return;
+
+            const paths = collectFolderPaths();
+            btn.style.display = paths.length ? 'flex' : 'none';
+            if (!paths.length) return;
+
+            const willCollapse = allSectionsExpanded();
+            const label = willCollapse ? 'Tout replier' : 'Tout deplier';
+            btn.title = label;
+            btn.setAttribute('aria-label', label);
+            btn.innerHTML = `<i data-lucide="${willCollapse ? 'chevrons-down-up' : 'chevrons-up-down'}" class="w-4 h-4"></i>`;
+            lucide.createIcons();
+        }
+
         function renderSidebar(searchResults = null) {
             const container = document.getElementById('nav-container');
             const noResults = document.getElementById('search-results-msg');
@@ -3946,6 +4084,9 @@
                 if (noResults) noResults.classList.add('hidden');
             }
 
+            // L'intitule du bouton suit l'etat reel des rubriques, y compris quand
+            // elles sont dépliées par une navigation plutot que par ce bouton.
+            refreshToggleAllButton();
             lucide.createIcons();
 
             const activeLink = container.querySelector('.nav-link.active');
@@ -4362,6 +4503,9 @@
             if (e.key === 'Escape') {
                 if (!searchModalOverlay.classList.contains('hidden')) closeSearch();
                 else if (lightbox.classList.contains('active')) closeLightbox();
+                // Les surlignages restent en place tant qu'on ne les efface pas :
+                // Echap est le geste attendu pour retrouver une page propre.
+                else if (clearSearchHighlights()) { /* surlignages effaces */ }
                 else {
                     closeMenu();
                     closeTOC();
