@@ -1,0 +1,30 @@
+/*
+ * CG Academy Theme - Synthwave & 3D Realtime
+ */
+:root {
+    --bg-body: #0b0d19;
+    --bg-sidebar: rgba(14, 17, 34, 0.95);
+    --border-color: rgba(168, 85, 247, 0.25);
+    --text-main: #cbd5e1;
+    --text-heading: #38bdf8;
+    --accent-green: #a855f7; /* Electric Purple */
+    --accent-dim: rgba(168, 85, 247, 0.12);
+    --code-bg: #0f1224;
+}
+
+::-webkit-scrollbar-thumb {
+    background: linear-gradient(180deg, #a855f7, #38bdf8);
+    border-radius: 4px;
+}
+
+.text-hack-green {
+    color: #a855f7 !important;
+}
+
+.bg-hack-green {
+    background-color: #a855f7 !important;
+}
+
+.border-hack-green {
+    border-color: #a855f7 !important;
+}

@@ -153,3 +153,90 @@ aside .sticky:has(#toc-container)::-webkit-scrollbar { display: none; }
 @media (prefers-reduced-motion: reduce) {
     #home-bg-canvas { transition: none; }
 }
+
+/* Callouts Obsidian (> [!note]) et alertes GitHub ([!NOTE]) partagent le meme
+   rendu. Le moteur pose .github-alert sur la citation et prefixe un titre. */
+.markdown-body .github-alert {
+    border-left: 3px solid var(--alert-color, var(--accent-green, #22c55e));
+    background: color-mix(in srgb, var(--alert-color, #22c55e) 8%, transparent);
+    border-radius: 0 8px 8px 0;
+    padding: 0.75rem 1rem;
+    margin: 1.1rem 0;
+}
+
+.markdown-body .github-alert-title {
+    display: flex;
+    align-items: center;
+    gap: 0.45rem;
+    color: var(--alert-color, var(--accent-green, #22c55e));
+    font-weight: 700;
+    font-size: 0.82rem;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    margin-bottom: 0.35rem;
+}
+
+.markdown-body .github-alert > p,
+.markdown-body .github-alert > ul,
+.markdown-body .github-alert > ol {
+    font-size: 0.95rem;
+    line-height: 1.6;
+    margin: 0.35rem 0;
+}
+
+.markdown-body .github-alert > :last-child { margin-bottom: 0; }
+
+.markdown-body .alert-note      { --alert-color: #539bf5; }
+.markdown-body .alert-tip       { --alert-color: #57ab5a; }
+.markdown-body .alert-important { --alert-color: #986ee2; }
+.markdown-body .alert-warning   { --alert-color: #c69026; }
+.markdown-body .alert-caution   { --alert-color: #e5534b; }
+.markdown-body .alert-question  { --alert-color: #4cc2c4; }
+.markdown-body .alert-example   { --alert-color: #a371f7; }
+.markdown-body .alert-quote     { --alert-color: #768390; }
+.markdown-body .alert-success   { --alert-color: #57ab5a; }
+.markdown-body .alert-failure   { --alert-color: #e5534b; }
+.markdown-body .alert-bug       { --alert-color: #e5534b; }
+.markdown-body .alert-abstract  { --alert-color: #4cc2c4; }
+.markdown-body .alert-todo      { --alert-color: #539bf5; }
+
+/* Repli des callouts Obsidian notes [!note]- et [!note]+ */
+.markdown-body .github-alert.is-foldable > .github-alert-title { cursor: pointer; }
+.markdown-body .github-alert.is-foldable > .github-alert-title::after {
+    content: '';
+    margin-left: auto;
+    width: 0.4rem;
+    height: 0.4rem;
+    border-right: 2px solid currentColor;
+    border-bottom: 2px solid currentColor;
+    transform: rotate(45deg);
+    transition: transform 160ms ease;
+}
+.markdown-body .github-alert.is-folded > .github-alert-title::after { transform: rotate(-45deg); }
+.markdown-body .github-alert.is-folded > :not(.github-alert-title) { display: none; }
+
+/* PDF integres dans la page (embeds Obsidian ![[fichier.pdf]]). */
+.markdown-body .pdf-wrap { margin: 1.1rem 0; }
+.markdown-body .pdf-wrap .pdf-open { font-size: 12px; opacity: 0.75; }
+.markdown-body .pdf-embed {
+    width: 100%;
+    height: 78vh;
+    min-height: 420px;
+    border: 1px solid var(--border-color, rgba(255, 255, 255, 0.12));
+    border-radius: 8px;
+    margin: 0.6rem 0 0.3rem;
+    background: #1b1b1b;
+}
+
+.markdown-body video,
+.markdown-body audio { max-width: 100%; border-radius: 8px; margin: 0.8rem 0; }
+.markdown-body audio { width: 100%; }
+
+/* Logos en squircle facon iOS. */
+#sidebar-logo, #mobile-logo {
+    border-radius: 22.5% !important;
+    overflow: hidden !important;
+    object-fit: cover !important;
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35) !important;
+    border: 1px solid rgba(255, 255, 255, 0.12) !important;
+}

@@ -1463,7 +1463,10 @@
             cacheVersion: "dev",
             currentTitle: "",
             currentFolder: "",
-            currentFilename: ""
+            currentFilename: "",
+            // Racine de contenu (wiki, docs, wiki/docs) retiree de l'arborescence
+            // affichee mais reinjectee a chaque lecture de fichier.
+            contentPrefix: ""
         };
 
         if (typeof CONFIG !== 'undefined') {
@@ -2099,6 +2102,32 @@
             return sorted;
         }
 
+        // Les racines de contenu (wiki/, docs/) etaient exposees comme un dossier de
+        // premier niveau : la barre laterale affichait "wiki > docs > 01_Intro" au lieu
+        // de "01_Intro". On les retire de l'affichage et on garde le prefixe reel dans
+        // STATE.contentPrefix pour que les lectures de fichiers restent valides.
+        // Aucun aplatissement si le depot melange une racine de contenu et des dossiers
+        // poses a cote : le prefixe ne serait alors plus commun a toutes les pages.
+        function flattenContentRoot(structure) {
+            const CONTENT_ROOTS = ['wiki', 'docs'];
+            let current = structure;
+            let prefix = '';
+
+            while (current && typeof current === 'object') {
+                const keys = Object.keys(current);
+                if (keys.length !== 1) break;
+                const only = keys[0];
+                if (!CONTENT_ROOTS.includes(only)) break;
+                const child = current[only];
+                if (!child || typeof child !== 'object' || Array.isArray(child)) break;
+                if (Object.keys(child).length === 0) break;
+                prefix = prefix ? `${prefix}/${only}` : only;
+                current = child;
+            }
+
+            return { structure: current, prefix };
+        }
+
         async function initWiki() {
             try {
                 debugLog('[AcidWiki] 🚀 Initializing wiki...');
@@ -2120,7 +2149,10 @@
                 const rootMdFiles = (discoveryResult && discoveryResult.rootMdFiles) || [];
 
                 if (structure && typeof structure === 'object' && !Array.isArray(structure)) {
-                    structure = sortWikiStructure(structure);
+                    const flattened = flattenContentRoot(structure);
+                    structure = sortWikiStructure(flattened.structure);
+                    STATE.contentPrefix = flattened.prefix;
+                    if (flattened.prefix) debugLog(`[AcidWiki] 📁 Content root hidden from nav: ${flattened.prefix}/`);
                 } else {
                     structure = null;
                 }
@@ -2494,10 +2526,13 @@
             }
         }
 
-        // `folder` porte deja la racine de contenu (docs, wiki) telle que decrite par
-        // l'arborescence du repo, le chemin est donc directement exploitable.
+        // `folder` est le chemin affiche dans la navigation, donc ampute de la racine
+        // de contenu. On la reinjecte ici : c'est le seul point de traduction entre un
+        // emplacement de la barre laterale et un chemin de fichier reel.
         function getRepoPath(folder, filename, isRoot) {
-            return (isRoot || !folder) ? filename : `${folder}/${filename}`;
+            if (isRoot) return filename;
+            const parts = [STATE.contentPrefix, folder, filename].filter(Boolean);
+            return parts.join('/');
         }
 
         function handleInitialRoute() {
@@ -2508,7 +2543,12 @@
                 toggleVersionsPage(null, false);
             } else if (pageParam) {
                 const flatList = getFlatPageList();
-                const normalizedPageParam = stripWikiIdFromPageParam(pageParam);
+                let normalizedPageParam = stripWikiIdFromPageParam(pageParam);
+                // Compatibilite : les liens produits avant l'aplatissement portent encore
+                // la racine de contenu (?page=wiki/docs/Guide.md). On la retire.
+                if (STATE.contentPrefix && normalizedPageParam.startsWith(`${STATE.contentPrefix}/`)) {
+                    normalizedPageParam = normalizedPageParam.slice(STATE.contentPrefix.length + 1);
+                }
                 const found = flatList.find(item => {
                     if (item.folder === '') return item.file === normalizedPageParam || item.file === pageParam;
                     return `${item.folder}/${item.file}` === normalizedPageParam || item.file === normalizedPageParam;
@@ -2887,7 +2927,7 @@
                 // centering, and which the markdown renderer never sees.
                 viewer.querySelectorAll('img[src]').forEach(img => {
                     const original = img.getAttribute('src');
-                    const resolved = resolveRepoAsset(original, filename);
+                    const resolved = resolveRepoAsset(original, getRepoPath(folder, filename, isRoot));
                     if (resolved !== original) img.setAttribute('src', resolved);
                 });
 
@@ -3028,8 +3068,8 @@
             }
 
             try {
-                const path = `${folder}/${filename}`;
-                const res = await fetch(`https://api.github.com/repos/${STATE.repo}/commits?path=${path}&page=1&per_page=1`);
+                const path = getRepoPath(folder, filename, !folder);
+                const res = await fetch(`https://api.github.com/repos/${STATE.repo}/commits?path=${encodeRepoPath(path)}&page=1&per_page=1`);
                 if (res.ok) {
                     const data = await res.json();
                     if (data.length > 0) {
@@ -3057,7 +3097,7 @@
                     try {
                         const isGitHubPages = /\.github\.io$/i.test(window.location.hostname);
                         if (isRoot && STATE.repo && STATE.branch) {
-                            const rawUrl = `https://raw.githubusercontent.com/${STATE.repo}/${STATE.branch}/${item.file}`;
+                            const rawUrl = `https://raw.githubusercontent.com/${STATE.repo}/${STATE.branch}/${encodeRepoPath(item.file)}`;
                             const rawRes = await fetch(rawUrl);
                             if (rawRes.ok) {
                                 const rawText = await rawRes.text();
@@ -3066,7 +3106,7 @@
                         }
 
                         if (!text && !(isRoot && isGitHubPages)) {
-                            const url = isRoot ? `./${item.file}` : `./${item.folder}/${item.file}`;
+                            const url = `./${encodeRepoPath(getRepoPath(item.folder, item.file, isRoot))}`;
                             const res = await fetch(url);
                             if (!res.ok) return;
                             const localText = await res.text();

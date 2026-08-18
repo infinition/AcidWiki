@@ -40,7 +40,10 @@ const CONFIG = {
         { id: "paper-cool", name: "Cool Paper", file: "wiki/themes/paper-cool.css", isDark: false },
         { id: "retro-irc", name: "Retro IRC", file: "wiki/themes/retro-irc.css", isDark: false },
         { id: "nature", name: "Nature", file: "wiki/themes/nature.css", isDark: false },
-        { id: "glassmorphism", name: "Glassmorphism", file: "wiki/themes/glassmorphism.css", isDark: true }
+        { id: "glassmorphism", name: "Glassmorphism", file: "wiki/themes/glassmorphism.css", isDark: true },
+        { id: "cg-academy", name: "CG Academy Synthwave", file: "wiki/themes/cg-academy.css", isDark: true },
+        { id: "cyber-hackademy", name: "Cyber Hackademy Terminal", file: "wiki/themes/cyber-hackademy.css", isDark: true },
+        { id: "science-academy", name: "Science Academy Quantum", file: "wiki/themes/science-academy.css", isDark: true }
     ],
     // Ecrase par la cle "theme" de .github/acidwiki.json quand le repo en definit une.
     // Sert uniquement de premiere visite : le choix du visiteur est ensuite memorise
@@ -125,3 +128,7 @@ const CONFIG = {
     }
 };
 
+// Le moteur charge ce fichier en script classique : un `const` de premier niveau
+// ne remonte pas sur window. Les modules externes (enhancements.js, providers)
+// lisent window.CONFIG, cet export est donc obligatoire.
+window.CONFIG = CONFIG;

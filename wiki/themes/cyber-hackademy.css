@@ -1,0 +1,30 @@
+/*
+ * Cyber Hackademy Theme - Crimson & Matrix Cyberpunk
+ */
+:root {
+    --bg-body: #06080d;
+    --bg-sidebar: rgba(9, 12, 18, 0.96);
+    --border-color: rgba(239, 68, 68, 0.28);
+    --text-main: #cbd5e1;
+    --text-heading: #10b981; /* Toxic Matrix Green */
+    --accent-green: #ef4444; /* Alert Crimson */
+    --accent-dim: rgba(239, 68, 68, 0.14);
+    --code-bg: #0a0d14;
+}
+
+::-webkit-scrollbar-thumb {
+    background: linear-gradient(180deg, #ef4444, #10b981);
+    border-radius: 4px;
+}
+
+.text-hack-green {
+    color: #ef4444 !important;
+}
+
+.bg-hack-green {
+    background-color: #ef4444 !important;
+}
+
+.border-hack-green {
+    border-color: #ef4444 !important;
+}
