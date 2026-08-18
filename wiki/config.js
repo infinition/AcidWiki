@@ -76,6 +76,11 @@ const CONFIG = {
         showRootReadme: true,
         searchIndexConcurrency: 8,
         allowIframes: false,
+        // Ordre de la navigation : "name" (tri naturel) ou "date" (recents en tete,
+        // demande un index statique, seul porteur des dates de modification).
+        sortMode: "name",
+        // Fine barre de progression de lecture en haut de la page.
+        readingProgress: true,
         debug: true
     },
 

@@ -2099,15 +2099,33 @@
         // --- 4. WIKI CORE ---
         const naturalCollator = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' });
 
-        function sortWikiStructure(obj) {
+        // Ordre de la navigation. "name" garde le tri naturel historique, qui range
+        // 2 avant 10 ; "date" met les pages recemment modifiees en tete, ce qui n'a de
+        // sens qu'avec un index statique, seul porteur des dates. Un mode inconnu ou
+        // une date manquante retombent sur le tri par nom.
+        function sortWikiStructure(obj, folderPath = '') {
+            const byDate = CONFIG.features.sortMode === 'date' && STATE.contentIndex?.mtimes;
+
+            const dateOf = (filename) => {
+                const parts = [STATE.contentPrefix, folderPath, filename].filter(Boolean);
+                const stamp = STATE.contentIndex.mtimes[parts.join('/')];
+                return stamp ? Date.parse(stamp) : 0;
+            };
+
             const sorted = {};
             Object.entries(obj).sort(([keyA, valueA], [keyB, valueB]) => {
                 const aFolder = typeof valueA === 'object' && valueA !== null;
                 const bFolder = typeof valueB === 'object' && valueB !== null;
                 if (aFolder !== bFolder) return aFolder ? -1 : 1;
+                if (byDate && !aFolder && !bFolder) {
+                    const delta = dateOf(valueB) - dateOf(valueA);
+                    if (delta) return delta;
+                }
                 return naturalCollator.compare(keyA, keyB);
             }).forEach(([key, value]) => {
-                sorted[key] = typeof value === 'object' && value !== null ? sortWikiStructure(value) : value;
+                sorted[key] = typeof value === 'object' && value !== null
+                    ? sortWikiStructure(value, folderPath ? `${folderPath}/${key}` : key)
+                    : value;
             });
             return sorted;
         }
@@ -2397,6 +2415,7 @@
                 STATE.rootMdFiles = rootMdFiles.length > 0 ? rootMdFiles : (CONFIG.features.showRootReadme ? [{ title: 'README.md'.replace(/\.md$/, '').replace(/_/g, ' '), filename: 'README.md' }] : []);
                 invalidateVaultLookup();
                 configureObsidianLayer();
+                installReadingProgress();
                 if (STATE.rootMdFiles.length > 0) {
                     const rootObj = Object.fromEntries(STATE.rootMdFiles.map(f => [f.title, f.filename]));
                     STATE.wikiData = { __root__: rootObj, ...structure };
@@ -3029,6 +3048,33 @@
         // Une navigation qui en interrompt une autre fait rejeter les promesses de la
         // transition. Personne ne les attendait, le navigateur signalait donc une
         // erreur non capturee a chaque clic rapide dans la barre laterale.
+        // Barre de progression de lecture, posee sur le conteneur defilant. Elle ne
+        // coute qu'un changement de largeur, calcule dans un frame d'animation pour ne
+        // pas relire la mise en page a chaque evenement de defilement.
+        function installReadingProgress() {
+            if (CONFIG.features.readingProgress === false) return;
+            const scroller = document.getElementById('scroll-container');
+            if (!scroller || document.getElementById('reading-progress')) return;
+
+            const bar = document.createElement('div');
+            bar.id = 'reading-progress';
+            bar.setAttribute('aria-hidden', 'true');
+            document.body.appendChild(bar);
+
+            // Calcul direct plutot que differe par requestAnimationFrame : le callback
+            // n'est jamais appele quand l'onglet ne produit pas d'images, et la barre
+            // restait alors figee. Trois lectures deja calculees pendant le defilement
+            // ne coutent pas de recalcul de mise en page.
+            const update = () => {
+                const travel = scroller.scrollHeight - scroller.clientHeight;
+                const ratio = travel > 0 ? Math.min(1, scroller.scrollTop / travel) : 0;
+                bar.style.width = `${(ratio * 100).toFixed(2)}%`;
+            };
+
+            scroller.addEventListener('scroll', update, { passive: true });
+            update();
+        }
+
         function withPageTransition(run) {
             if (!CONFIG.features.pageTransitions || !document.startViewTransition) {
                 run();

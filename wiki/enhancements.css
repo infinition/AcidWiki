@@ -240,3 +240,21 @@ aside .sticky:has(#toc-container)::-webkit-scrollbar { display: none; }
     box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35) !important;
     border: 1px solid rgba(255, 255, 255, 0.12) !important;
 }
+
+/* Progression de lecture. Posee au-dessus du fil d'Ariane colle en haut, qui est
+   lui-meme en z-index 80 dans le moteur. */
+#reading-progress {
+    position: fixed;
+    top: 0;
+    left: 0;
+    z-index: 120;
+    width: 0;
+    height: 2px;
+    background: var(--accent-green, #22c55e);
+    pointer-events: none;
+    transition: width 90ms linear;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    #reading-progress { transition: none; }
+}
