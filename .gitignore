@@ -31,3 +31,9 @@ wiki/docs/*
 # Wiki Content (Keep empty for template)
 wiki/docs/*
 !wiki/docs/.gitkeep
+
+# Index statique : reconstruit a chaque deploiement par tools/build-index.mjs.
+# Une version commitee serait servie perimee si la construction echouait.
+wiki/index.json
+wiki/index-links.json
+__pycache__/

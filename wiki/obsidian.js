@@ -1,0 +1,225 @@
+/**
+ * Traduction de la syntaxe Obsidian vers du Markdown standard.
+ *
+ * Cette couche existait uniquement dans tools/serve.py, donc uniquement en local :
+ * un coffre publie sur GitHub Pages affichait ses [[liens]] en texte brut et ses
+ * ![[images]] pas du tout. Le portage cote client rend le meme coffre lisible dans
+ * tous les modes, sans toucher au contenu.
+ *
+ * Le module est volontairement sans etat partage : le moteur lui fournit ses
+ * fonctions de resolution via configure(), ce qui evite toute dependance a STATE.
+ */
+(() => {
+    const IMAGE_EXT = new Set(['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'bmp', 'avif', 'ico']);
+    const VIDEO_EXT = new Set(['mp4', 'webm', 'mov', 'm4v', 'ogv']);
+    const AUDIO_EXT = new Set(['mp3', 'wav', 'm4a', 'ogg', 'flac', 'aac']);
+
+    // Resolution fournie par le moteur. Valeurs neutres par defaut pour que le
+    // module reste utilisable seul (tests, outillage).
+    let hooks = {
+        // (cible, dossierDuDocument) -> chemin reel du fichier, ou null
+        resolvePath: () => null,
+        // (cheminReel) -> URL utilisable pour un media dans le mode courant
+        assetUrl: (path) => `./${path}`,
+        // (cheminReel) -> valeur du parametre ?page=
+        pageUrl: (path) => `?page=${encodeURI(path)}`
+    };
+
+    function configure(next) {
+        hooks = { ...hooks, ...next };
+    }
+
+    function extensionOf(path) {
+        const clean = String(path).split(/[?#]/)[0];
+        const dot = clean.lastIndexOf('.');
+        return dot === -1 ? '' : clean.slice(dot + 1).toLowerCase();
+    }
+
+    function escapeHtml(value) {
+        return String(value).replace(/[&<>"']/g, (c) => (
+            { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]
+        ));
+    }
+
+    /**
+     * Retire l'en-tete YAML et le renvoie sous forme de paires cle/valeur.
+     * Seul le premier niveau est lu : c'est tout ce dont le moteur se sert
+     * (titre, description, ordre d'affichage).
+     */
+    function splitFrontmatter(text) {
+        if (!/^---\r?\n/.test(text)) return { frontmatter: {}, body: text };
+        const end = text.indexOf('\n---', 3);
+        if (end === -1) return { frontmatter: {}, body: text };
+
+        const block = text.slice(4, end);
+        const body = text.slice(end + 4).replace(/^\r?\n/, '');
+        const frontmatter = {};
+        for (const line of block.split(/\r?\n/)) {
+            const match = line.match(/^([A-Za-z0-9_-]+)\s*:\s*(.*)$/);
+            if (match) frontmatter[match[1]] = match[2].trim().replace(/^["']|["']$/g, '');
+        }
+        return { frontmatter, body };
+    }
+
+    /**
+     * Un bloc $$...$$ ecrit sur plusieurs lignes avec des lignes vides est coupe en
+     * deux paragraphes par le rendu Markdown, et KaTeX ne voit plus de delimiteur.
+     */
+    function normalizeMathBlocks(text) {
+        return text.replace(/\$\$\r?\n([\s\S]*?)\r?\n\$\$/g, (_, body) => {
+            const compact = body.trim().replace(/\r?\n[ \t]*\r?\n/g, '\n');
+            return `\n$$${compact}$$\n`;
+        });
+    }
+
+    /**
+     * Les blocs de code sont mis de cote avant toute reecriture : un [[exemple]]
+     * dans un bloc de code doit rester tel quel.
+     */
+    function protectCodeBlocks(text) {
+        const vault = [];
+        const stash = (match) => {
+            vault.push(match);
+            return `\uE000ACIDWIKI_CODE_${vault.length - 1}\uE000`;
+        };
+        // Les blocs cloturés passent en premier. Dans l'ordre inverse, une ligne
+        // indentee a l'interieur d'un bloc ```mermaid etait mise de cote avant le
+        // bloc lui-meme, et son marqueur se retrouvait enferme dedans.
+        const masked = text
+            .replace(/```[\s\S]*?```/g, stash)
+            .replace(/~~~[\s\S]*?~~~/g, stash)
+            .replace(/^(?: {4}|\t)[^\n]*(?:\n(?: {4}|\t)[^\n]*)*/gm, stash)
+            .replace(/`[^`\n]+`/g, stash);
+        return { masked, vault };
+    }
+
+    function restoreCodeBlocks(text, vault) {
+        // Restauration repetee : un bloc mis de cote peut en contenir un autre, et
+        // un passage unique laisserait le marqueur interieur visible. La borne
+        // arrete une reference circulaire au lieu de boucler sans fin.
+        let out = text;
+        for (let pass = 0; pass < 5; pass++) {
+            const next = out.replace(/\uE000ACIDWIKI_CODE_(\d+)\uE000/g,
+                (whole, index) => vault[Number(index)] ?? whole);
+            if (next === out) break;
+            out = next;
+        }
+        return out;
+    }
+
+    /**
+     * Rendu d'un fichier joint. Les PDF passent par un conteneur porteur de data-pdf :
+     * le nettoyage HTML retire les iframe, le moteur reconstruit donc l'apercu
+     * apres coup a partir de cet attribut.
+     */
+    function renderEmbed(realPath, label, sizeHint) {
+        const url = hooks.assetUrl(realPath);
+        const ext = extensionOf(realPath);
+        const alt = escapeHtml(label || realPath.split('/').pop());
+
+        if (IMAGE_EXT.has(ext)) {
+            const width = sizeHint ? ` width="${escapeHtml(sizeHint)}"` : '';
+            return `<img src="${escapeHtml(url)}" alt="${alt}" loading="lazy"${width}>`;
+        }
+        if (VIDEO_EXT.has(ext)) {
+            return `<video controls preload="metadata" src="${escapeHtml(url)}"></video>`;
+        }
+        if (AUDIO_EXT.has(ext)) {
+            return `<audio controls preload="metadata" src="${escapeHtml(url)}"></audio>`;
+        }
+        if (ext === 'pdf') {
+            return `<div class="pdf-wrap" data-pdf="${escapeHtml(url)}" data-pdf-label="${alt}">`
+                + `<div class="pdf-open"><a href="${escapeHtml(url)}" target="_blank" rel="noopener">${alt}</a></div>`
+                + `</div>`;
+        }
+        return `<a href="${escapeHtml(url)}" target="_blank" rel="noopener">${alt}</a>`;
+    }
+
+    function splitTarget(raw) {
+        const [targetPart, ...aliasParts] = String(raw).split('|');
+        const target = targetPart.trim();
+        const alias = aliasParts.length ? aliasParts.join('|').trim() : null;
+        const [path, anchor] = target.split('#');
+        return { path: path.trim(), anchor: anchor ? anchor.trim() : '', alias };
+    }
+
+    /** ![[cible]] : image, media, PDF, ou lien vers une autre page. */
+    function translateEmbeds(text, baseDir) {
+        return text.replace(/!\[\[([^\]\n]+)\]\]/g, (whole, raw) => {
+            const { path, alias } = splitTarget(raw);
+            if (!path) return whole;
+
+            // Obsidian utilise l'alias comme largeur quand c'est un nombre.
+            const sizeHint = alias && /^\d+$/.test(alias) ? alias : null;
+            const label = sizeHint ? null : alias;
+
+            const real = hooks.resolvePath(path, baseDir);
+            if (!real) return `<span class="acid-missing-link" title="Cible introuvable">${escapeHtml(label || path)}</span>`;
+            if (/\.md$/i.test(real)) {
+                return `<a href="${escapeHtml(hooks.pageUrl(real))}">${escapeHtml(label || path)}</a>`;
+            }
+            return renderEmbed(real, label, sizeHint);
+        });
+    }
+
+    /** [[cible|libelle]] : lien interne vers une page ou un fichier. */
+    function translateWikiLinks(text, baseDir) {
+        return text.replace(/\[\[([^\]\n]+)\]\]/g, (whole, raw) => {
+            const { path, anchor, alias } = splitTarget(raw);
+            const label = alias || (anchor && !path ? anchor : path);
+            if (!path && anchor) return `[${label}](#${anchor})`;
+            if (!path) return whole;
+
+            const real = hooks.resolvePath(path, baseDir);
+            if (!real) return `<span class="acid-missing-link" title="Cible introuvable">${escapeHtml(label)}</span>`;
+
+            if (/\.md$/i.test(real)) {
+                const href = hooks.pageUrl(real) + (anchor ? `#${encodeURIComponent(anchor)}` : '');
+                return `[${label}](${href})`;
+            }
+            return `[${label}](${hooks.assetUrl(real)})`;
+        });
+    }
+
+    /**
+     * Les chemins d'images relatifs d'un coffre pointent vers un dossier de pieces
+     * jointes qui n'existe pas a cote du moteur. On les repasse par la resolution.
+     */
+    function resolveRelativeImages(text, baseDir) {
+        return text.replace(/!\[([^\]]*)\]\(([^)\s]+)(\s+"[^"]*")?\)/g, (whole, alt, target, title) => {
+            if (/^(https?:|data:|blob:|\/\/|\/)/i.test(target)) return whole;
+            const real = hooks.resolvePath(decodeURIComponent(target), baseDir);
+            if (!real) return whole;
+            return `![${alt}](${hooks.assetUrl(real)}${title || ''})`;
+        });
+    }
+
+    /**
+     * Point d'entree. Renvoie le Markdown traduit ; le document d'origine n'est
+     * jamais modifie.
+     */
+    function preprocess(text, options = {}) {
+        if (!text || typeof text !== 'string') return { markdown: text || '', frontmatter: {} };
+
+        const baseDir = (options.docPath || '').replace(/\\/g, '/').split('/').slice(0, -1).join('/');
+        const { frontmatter, body } = splitFrontmatter(text);
+
+        const { masked, vault } = protectCodeBlocks(body);
+        let output = masked;
+        output = translateEmbeds(output, baseDir);
+        output = translateWikiLinks(output, baseDir);
+        output = resolveRelativeImages(output, baseDir);
+        output = restoreCodeBlocks(output, vault);
+        output = normalizeMathBlocks(output);
+
+        return { markdown: output, frontmatter };
+    }
+
+    window.AcidWikiObsidian = {
+        configure,
+        preprocess,
+        splitFrontmatter,
+        // exportes pour l'outillage et les tests
+        _internals: { protectCodeBlocks, restoreCodeBlocks, normalizeMathBlocks, extensionOf }
+    };
+})();

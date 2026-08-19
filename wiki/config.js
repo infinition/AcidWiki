@@ -20,6 +20,16 @@ const CONFIG = {
     repo: "infinition/AcidWiki",
     branch: "main",
 
+    // Strategie de decouverte du contenu. Ecrase par la cle "mode" de acidwiki.json.
+    //   "auto"   (defaut) index statique si present, sinon detection historique
+    //   "github" API GitHub uniquement
+    //   "local"  listings HTTP (python -m http.server, tools/serve.py) ; alias "vault"
+    //   "static" index wiki/index.json uniquement, hors ligne et sans API
+    mode: "auto",
+
+    // Emplacement de l'index statique produit par tools/build-index.mjs.
+    contentIndex: "wiki/index.json",
+
     // Theme Settings
     themes: [
         { id: "dark", name: "Dark Mode", file: "wiki/themes/dark.css", isDark: true },
@@ -40,7 +50,10 @@ const CONFIG = {
         { id: "paper-cool", name: "Cool Paper", file: "wiki/themes/paper-cool.css", isDark: false },
         { id: "retro-irc", name: "Retro IRC", file: "wiki/themes/retro-irc.css", isDark: false },
         { id: "nature", name: "Nature", file: "wiki/themes/nature.css", isDark: false },
-        { id: "glassmorphism", name: "Glassmorphism", file: "wiki/themes/glassmorphism.css", isDark: true }
+        { id: "glassmorphism", name: "Glassmorphism", file: "wiki/themes/glassmorphism.css", isDark: true },
+        { id: "cg-academy", name: "CG Academy Synthwave", file: "wiki/themes/cg-academy.css", isDark: true },
+        { id: "cyber-hackademy", name: "Cyber Hackademy Terminal", file: "wiki/themes/cyber-hackademy.css", isDark: true },
+        { id: "science-academy", name: "Science Academy Quantum", file: "wiki/themes/science-academy.css", isDark: true }
     ],
     // Ecrase par la cle "theme" de .github/acidwiki.json quand le repo en definit une.
     // Sert uniquement de premiere visite : le choix du visiteur est ensuite memorise
@@ -61,8 +74,20 @@ const CONFIG = {
         autoCollapseSidebar: false,
         stickyBreadcrumbs: true,
         showRootReadme: true,
+        // Regrouper les markdown de la racine sous une rubrique repliable
+        // (ancien comportement, intitule par ui.rootReadmeTitle). A false, ils
+        // apparaissent directement en tete de la navigation.
+        groupRootFiles: false,
+        // Apercu du theme au survol de son nom dans le selecteur. La feuille de
+        // style n'est demandee qu'au survol, jamais a l'ouverture du menu.
+        themeHoverPreview: true,
         searchIndexConcurrency: 8,
         allowIframes: false,
+        // Ordre de la navigation : "name" (tri naturel) ou "date" (recents en tete,
+        // demande un index statique, seul porteur des dates de modification).
+        sortMode: "name",
+        // Fine barre de progression de lecture en haut de la page.
+        readingProgress: true,
         debug: true
     },
 
@@ -93,7 +118,9 @@ const CONFIG = {
         indexingSearchText: "Indexing documents",
         themeChangedText: "Theme changed to: ",
         menuText: "Menu",
-        onThisPageMobile: "On this page"
+        onThisPageMobile: "On this page",
+        // Premier maillon du fil d'Ariane, cliquable, ramene a l'accueil.
+        breadcrumbRoot: "wiki"
     },
 
     // Logo Settings
@@ -125,3 +152,7 @@ const CONFIG = {
     }
 };
 
+// Le moteur charge ce fichier en script classique : un `const` de premier niveau
+// ne remonte pas sur window. Les modules externes (enhancements.js, providers)
+// lisent window.CONFIG, cet export est donc obligatoire.
+window.CONFIG = CONFIG;

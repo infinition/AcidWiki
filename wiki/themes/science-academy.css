@@ -1,0 +1,30 @@
+/*
+ * Science Academy Theme - Quantum Cyan & Solar Amber
+ */
+:root {
+    --bg-body: #070a13;
+    --bg-sidebar: rgba(10, 15, 28, 0.96);
+    --border-color: rgba(14, 165, 233, 0.25);
+    --text-main: #cbd5e1;
+    --text-heading: #38bdf8; /* Quantum Cyan */
+    --accent-green: #0ea5e9; /* Electric Science Blue */
+    --accent-dim: rgba(14, 165, 233, 0.12);
+    --code-bg: #0c1222;
+}
+
+::-webkit-scrollbar-thumb {
+    background: linear-gradient(180deg, #0ea5e9, #f59e0b);
+    border-radius: 4px;
+}
+
+.text-hack-green {
+    color: #0ea5e9 !important;
+}
+
+.bg-hack-green {
+    background-color: #0ea5e9 !important;
+}
+
+.border-hack-green {
+    border-color: #0ea5e9 !important;
+}

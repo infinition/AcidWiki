@@ -14,19 +14,24 @@ The core logic lives in this repository. Client repositories reference AcidWiki 
 
 ## Features
 
-- Centralized engine: client repos stay thin, logic stays here.
-- Configuration via `acidwiki.json` only, no JavaScript required.
-- Auto-discovery of docs via GitHub API — add a Markdown file, it appears in the nav.
-- Detects GitHub Releases or Tags automatically for version display.
-- Project name, copyright year, and GitHub links injected at build time.
-- Daily CRON update: checks for engine changes and self-patches.
-- Dark mode, responsive layout, smooth transitions.
-- Native Mermaid diagrams, centered on a fully transparent canvas.
-- Deep Math Academy theme with an animated particle background.
-- Natural folder sorting, stable folder icons, and Index/README-first breadcrumbs.
-- Scrollable, self-following table of contents for long chapters.
+- One engine for every use: GitHub repository, local server, Obsidian vault, or
+  offline static file. The mode is declared in a JSON file.
+- Configured through `acidwiki.json` only, no JavaScript to write.
+- Automatic content discovery: add a Markdown file and it shows up.
+- Optional static index: no API calls, works offline, no GitHub rate limit.
+- Obsidian vault syntax rendered everywhere: `[[links]]`, `![[images]]`,
+  embedded video, audio and PDF, callouts, YAML front matter.
+- Quizzes and flashcards, inline in the page or in a JSON file next to it,
+  with nothing to enable.
+- Automatic detection of GitHub Releases or Tags for the version display.
+- Daily CRON update: the engine keeps itself up to date.
+- 22 themes with hover preview, dark mode, responsive layout.
+- Native Mermaid diagrams, KaTeX formulas, full text search.
+- Sticky table of contents that follows your reading, progress bar, sorting by
+  name or by modification date.
 
----
+See [docs/CONFIGURATION.md](docs/CONFIGURATION.md) for the settings and
+[docs/CONTENT.md](docs/CONTENT.md) for the writing syntax.
 
 ## Quick Start
 
@@ -108,7 +113,11 @@ Use a square transparent PNG for best results.
         Setup.md
       Guide.md
     assets/               Images (logo.png, screenshots)
-    config.js             Generated — do not edit manually
+    config.js             Generated, do not edit manually
+    themes.js             Theme catalog, generated from themes/
+    themes/               One stylesheet per theme
+    index.json            Static index, built at deployment
+  tools/                  Build, check and serve scripts
   index.html              The engine (auto-updated from source)
   README.md               Becomes the home page
 ```
@@ -134,13 +143,20 @@ Use a square transparent PNG for best results.
 
 ## Local development
 
-The engine uses the GitHub API in production. Locally it falls back to a filesystem scan.
+On Windows, double click `acidwiki.bat` to browse this repository with its own
+engine, or `check.bat` to run every check first and then start the server.
+
+Otherwise, pick whichever fits:
 
 ```bash
-python -m http.server 8000
+python tools/serve.py --self        # serve this repository, from any directory
+python tools/serve.py --vault .     # serve an Obsidian vault, index built on the fly
+node tools/build-index.mjs          # build a static index, then open index.html offline
+python -m http.server 8000          # plain preview through directory listings
 ```
 
-Open `http://localhost:8000`. Markdown files inside `wiki/docs/` are discovered automatically. Root Markdown files can be listed in `CONFIG.localRootMarkdown` for a fully offline preview; production discovers them through the GitHub API.
+Mode `auto` decides on its own: the static index when it exists, otherwise
+detection from the context. Markdown files are discovered automatically.
 
 `AcidWiki-Feature-Test.md` is a ready-made visual test page for Mermaid, KaTeX, tables, code, the animated theme, and long tables of contents.
 
@@ -155,6 +171,25 @@ Open `http://localhost:8000`. Markdown files inside `wiki/docs/` are discovered 
    <img alt="Star History Chart" src="https://api.star-history.com/chart?repos=infinition/AcidWiki&type=date&legend=top-left" />
  </picture>
 </a>
+
+---
+
+## Tooling
+
+```bash
+check.bat                       # every check below, then start the server (Windows)
+node tools/build-index.mjs      # build the static index
+node tools/build-themes.mjs     # regenerate the theme catalog from wiki/themes/
+node tools/check-syntax.mjs     # parse every engine file
+node tools/test-modules.mjs     # module test bench
+node tools/sync-engine.mjs --check              # verify the engine on its own
+node tools/sync-engine.mjs --target <folder>    # update a local deployment
+python tools/serve.py --self    # serve this repository
+```
+
+`sync-engine.mjs` derives what belongs to the engine from `index.html` itself,
+so a newly added resource is carried over without editing any list. A local
+deployment keeps its own `wiki/config.js`, `wiki/assets` and index files.
 
 ---
 
