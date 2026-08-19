@@ -1,30 +1,29 @@
 # Configuration
 
-Tout se declare dans un seul fichier, `.github/acidwiki.json` pour un depot GitHub,
-`wiki/config.js` pour un usage local. Aucune ligne de JavaScript a ecrire.
+Everything is declared in a single file: `.github/acidwiki.json` for a GitHub
+repository, `wiki/config.js` for local use. No JavaScript to write.
 
-## Modes de fonctionnement
+## Operating modes
 
-Un wiki peut etre servi de quatre facons. Le mode se choisit avec la cle `mode`.
+A wiki can be served in four ways. The mode is picked with the `mode` key.
 
-| `mode` | Decouverte du contenu | Pour quoi |
+| `mode` | Content discovery | Use it for |
 |---|---|---|
-| `auto` (defaut) | index statique s'il existe, sinon detection historique | ne rien decider |
-| `github` | API GitHub (arborescence, releases, dates) | GitHub Pages, depot public |
-| `local` | listings HTTP du serveur | `python -m http.server`, `tools/serve.py` |
-| `vault` | alias de `local` | coffre Obsidian |
-| `static` | `wiki/index.json` seul | hors ligne, intranet, aucun appel tiers |
+| `auto` (default) | static index when present, otherwise legacy detection | deciding nothing |
+| `github` | GitHub API (tree, releases, dates) | GitHub Pages, public repository |
+| `local` | server directory listings | `python -m http.server`, `tools/serve.py` |
+| `vault` | alias of `local` | Obsidian vault |
+| `static` | `wiki/index.json` only | offline, intranet, no third party call |
 
-`auto` reproduit exactement le comportement d'avant, avec en plus la lecture de
-l'index statique quand il est present. Un depot existant n'a donc rien a changer.
+`auto` reproduces the previous behaviour exactly, plus reading the static index
+when it exists. An existing repository has nothing to change.
 
 > [!TIP]
-> `static` est le mode a preferer des que le contenu depasse quelques dizaines de
-> pages. Sans index, chaque visiteur interroge l'API GitHub pour l'arborescence
-> puis une fois par page pour la date de derniere edition, avec un plafond de
-> soixante requetes par heure et par adresse.
+> Prefer `static` as soon as the content passes a few dozen pages. Without an
+> index, every visitor queries the GitHub API once for the tree and once per page
+> for the last edit date, against a limit of sixty requests per hour per address.
 
-## Cles de `.github/acidwiki.json`
+## Keys of `.github/acidwiki.json`
 
 ```json
 {
@@ -36,9 +35,9 @@ l'index statique quand il est present. Un depot existant n'a donc rien a changer
     "reddit": "https://reddit.com/r/xxxx"
   },
   "buymeacoffee": "https://buymeacoffee.com/xxxx",
-  "projectName": "Mon Projet",
-  "description": "Documentation de Mon Projet",
-  "footerText": "© 2026 Mon Projet",
+  "projectName": "My Project",
+  "description": "Documentation for My Project",
+  "footerText": "© 2026 My Project",
   "features": {
     "sortMode": "name",
     "readingProgress": true,
@@ -47,85 +46,127 @@ l'index statique quand il est present. Un depot existant n'a donc rien a changer
   },
   "ui": {
     "breadcrumbRoot": "wiki",
-    "searchPlaceholder": "Rechercher (Ctrl+K)..."
+    "searchPlaceholder": "Search (Ctrl+K)..."
   }
 }
 ```
 
-Toutes les cles sont facultatives. Une cle absente garde sa valeur par defaut, un
-drapeau inconnu est signale dans le journal de construction sans arreter le
-deploiement. Un identifiant de theme inconnu est refuse et le theme par defaut
-est conserve, plutot que de livrer un wiki sans feuille de style.
+Every key is optional. A missing key keeps its default, an unknown flag is
+reported in the build log without stopping the deployment. An unknown theme id
+is rejected and the default theme is kept, rather than shipping a wiki with no
+stylesheet.
 
-Nom du projet, version, URL du depot et annee de copyright sont deduits du depot
-quand ils ne sont pas declares.
+Project name, version, repository URL and copyright year are derived from the
+repository when they are not declared.
 
-## Drapeaux de `features`
+## Theme catalog
 
-| Cle | Defaut | Effet |
+The theme list is generated from the stylesheets actually present in
+`wiki/themes/`:
+
+```bash
+node tools/build-themes.mjs
+```
+
+The engine serves that catalog whenever the configuration declares no `themes`
+key, so every deployment gets the full set. Declaring `themes` in your own
+configuration deliberately restricts the choice and takes over, at the cost of
+maintaining that list by hand on every theme added to the engine.
+
+## `features` flags
+
+| Key | Default | Effect |
 |---|---|---|
-| `sortMode` | `"name"` | ordre de la navigation : `name` (tri naturel) ou `date` (recents en tete, demande un index statique) |
-| `readingProgress` | `true` | barre de progression de lecture en haut de page |
-| `showChangelog` | `true` | page des releases GitHub, masquee sans depot configure |
-| `showSearch` | `true` | recherche plein texte |
-| `showSocialBadges` | `true` | pastilles Discord, Reddit, GitHub |
-| `showThemeToggle` | `true` | selecteur de theme |
-| `pageTransitions` | `true` | transitions entre pages |
-| `autoCollapseSidebar` | `false` | ne garder qu'une rubrique ouverte a la fois |
-| `stickyBreadcrumbs` | `true` | fil d'Ariane colle en haut |
-| `showRootReadme` | `true` | README du depot en page d'accueil |
-| `groupRootFiles` | `false` | regrouper les markdown de la racine sous une rubrique repliable ; a `false` ils sont poses directement en tete de navigation |
-| `themeHoverPreview` | `true` | apercu du theme au survol de son nom dans le selecteur |
-| `searchIndexConcurrency` | `8` | requetes simultanees pendant l'indexation |
-| `debug` | `false` | journal detaille dans la console |
+| `sortMode` | `"name"` | navigation order: `name` (natural sort) or `date` (most recent first, requires a static index) |
+| `readingProgress` | `true` | reading progress bar at the top of the page |
+| `showChangelog` | `true` | GitHub releases page, hidden without a configured repository |
+| `showSearch` | `true` | full text search |
+| `showSocialBadges` | `true` | Discord, Reddit and GitHub badges |
+| `showThemeToggle` | `true` | theme picker |
+| `pageTransitions` | `true` | transitions between pages |
+| `autoCollapseSidebar` | `false` | keep only one section open at a time |
+| `stickyBreadcrumbs` | `true` | breadcrumbs pinned to the top |
+| `showRootReadme` | `true` | repository README as the home page |
+| `groupRootFiles` | `false` | group root markdown files under a collapsible section; at `false` they sit directly at the top of the navigation |
+| `themeHoverPreview` | `true` | preview a theme by hovering its name in the picker |
+| `searchIndexConcurrency` | `8` | concurrent requests while indexing |
+| `debug` | `false` | verbose console logging |
 
-## Apercu des themes
+## Theme preview
 
-Survoler le nom d'un theme dans le selecteur l'applique immediatement a la page.
-Sortir de la liste ou fermer le menu remet le theme en cours, seul un clic
-engage le changement.
+Hovering a theme name in the picker applies it to the page immediately. Leaving
+the list or closing the menu restores the current theme, only a click commits
+the change.
 
-La feuille de style n'est demandee qu'au moment du survol : ouvrir le menu ne
-telecharge rien, et un theme jamais survole n'est jamais charge. Un court delai
-avant l'application evite d'enchainer les chargements quand le pointeur ne fait
-que traverser la liste. Le clavier declenche le meme apercu au passage du focus.
+The stylesheet is requested at hover time only: opening the menu downloads
+nothing, and a theme never hovered is never loaded. A short delay before
+applying avoids chaining downloads when the pointer merely crosses the list. The
+keyboard triggers the same preview as focus moves.
 
-Reglable par `features.themeHoverPreview`.
+Controlled by `features.themeHoverPreview`.
 
-## Index statique
+## Expand and collapse
+
+The button next to the search field opens or closes every section at once. Its
+icon and label announce the action to come and follow the real state of the
+navigation, including when a section was opened by navigating rather than by the
+button.
+
+`Escape` clears the search highlights, after closing the search dialog and the
+lightbox, which keep priority.
+
+## Static index
 
 ```bash
 node tools/build-index.mjs
 ```
 
-Produit `wiki/index.json` (arborescence, fichiers de racine, dates de
-modification, quizz voisins) et `wiki/index-links.json` (table de resolution des
-liens de coffre). Le second n'est telecharge que par les pages qui contiennent
-reellement un lien `[[...]]`.
+Produces `wiki/index.json` (tree, root files, modification dates, neighbouring
+quizzes) and `wiki/index-links.json` (vault link resolution table). The second
+one is downloaded only by pages that actually contain a `[[...]]` link.
 
-Options : `--root <dossier>`, `--content <sous-dossier>`, `--out <fichier>`.
+Options: `--root <folder>`, `--content <subfolder>`, `--out <file>`.
 
-Le workflow GitHub le construit automatiquement a chaque deploiement. Pour un
-coffre local, `python tools/serve.py --build` fait la meme chose, et le serveur
-le regenere de lui-meme pendant qu'il tourne.
+The GitHub workflow builds it on every deployment. For a local vault,
+`python tools/serve.py --build` does the same, and the running server
+regenerates it on its own.
 
-## Serveur local
+## Local server
 
 ```bash
-python tools/serve.py --vault "chemin/vers/le/coffre"
+python tools/serve.py --vault "path/to/the/vault"
 ```
 
-Un seul moteur sert autant de coffres que voulu. Le port est deduit du nom du
-coffre, ou impose par `--port`.
+A single engine serves as many vaults as you like. The port is derived from the
+vault name, or forced with `--port`.
 
-| Option | Effet |
+| Option | Effect |
 |---|---|
-| `--vault` | dossier du contenu (defaut : dossier courant) |
-| `--port` | port d'ecoute |
-| `--no-browser` | ne pas ouvrir le navigateur |
-| `--build [dossier]` | ecrire l'index et quitter |
-| `--legacy-translate` | traduire la syntaxe Obsidian cote serveur (ancien comportement) |
+| `--vault` | content folder (default: current directory) |
+| `--self` | serve the engine repository itself, from any directory |
+| `--port` | listening port |
+| `--no-browser` | do not open the browser |
+| `--build [folder]` | write the index and quit |
+| `--legacy-translate` | translate Obsidian syntax server side (previous behaviour) |
 
-Par defaut le serveur envoie le markdown brut et le moteur applique la meme
-traduction que sur GitHub Pages : le rendu local et le rendu publie sont
-identiques. `--legacy-translate` restaure la traduction cote serveur si besoin.
+By default the server sends raw markdown and the engine applies the same
+translation as on GitHub Pages: local and published rendering are identical.
+`--legacy-translate` restores server side translation if needed.
+
+`--self` anchors on the engine location instead of the current directory, and
+listens on a separate port so it can run alongside an open vault. On Windows,
+`acidwiki.bat` does exactly that in one double click.
+
+## Updating a local deployment
+
+```bash
+node tools/sync-engine.mjs --target "path/to/the/deployment" --dry-run
+```
+
+Copies the engine over an existing deployment while preserving what belongs to
+it: `wiki/config.js`, `wiki/assets`, and the index files. What belongs to the
+engine is derived from `index.html` itself, so a resource added to the engine is
+carried over without editing any list.
+
+`--check` verifies the engine on its own, without a deployment, and reports any
+resource the document asks for but that is missing from the repository.

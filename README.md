@@ -14,25 +14,24 @@ The core logic lives in this repository. Client repositories reference AcidWiki 
 
 ## Features
 
-- Un seul moteur pour tous les usages : depot GitHub, serveur local, coffre
-  Obsidian, ou fichier statique hors ligne. Le mode se declare dans un JSON.
-- Configuration par `acidwiki.json` uniquement, aucun JavaScript a ecrire.
-- Decouverte automatique du contenu : ajoutez un fichier Markdown, il apparait.
-- Index statique optionnel : zero appel API, fonctionne hors ligne, pas de
-  plafond de requetes GitHub.
-- Syntaxe de coffre Obsidian rendue partout : `[[liens]]`, `![[images]]`,
-  videos, sons, PDF integres, callouts, en-tete YAML.
-- Quizz et flashcards, dans la page ou dans un fichier json a cote, sans rien
-  activer.
-- Detection automatique des Releases ou Tags GitHub pour l'affichage de version.
-- Mise a jour quotidienne par CRON : le moteur se met a jour tout seul.
-- 22 themes, mode sombre, mise en page adaptative.
-- Diagrammes Mermaid natifs, formules KaTeX, recherche plein texte.
-- Sommaire deroulant qui suit la lecture, barre de progression, tri par nom ou
-  par date de modification.
+- One engine for every use: GitHub repository, local server, Obsidian vault, or
+  offline static file. The mode is declared in a JSON file.
+- Configured through `acidwiki.json` only, no JavaScript to write.
+- Automatic content discovery: add a Markdown file and it shows up.
+- Optional static index: no API calls, works offline, no GitHub rate limit.
+- Obsidian vault syntax rendered everywhere: `[[links]]`, `![[images]]`,
+  embedded video, audio and PDF, callouts, YAML front matter.
+- Quizzes and flashcards, inline in the page or in a JSON file next to it,
+  with nothing to enable.
+- Automatic detection of GitHub Releases or Tags for the version display.
+- Daily CRON update: the engine keeps itself up to date.
+- 22 themes with hover preview, dark mode, responsive layout.
+- Native Mermaid diagrams, KaTeX formulas, full text search.
+- Sticky table of contents that follows your reading, progress bar, sorting by
+  name or by modification date.
 
-Voir [docs/CONFIGURATION.md](docs/CONFIGURATION.md) pour les reglages et
-[docs/CONTENU.md](docs/CONTENU.md) pour la syntaxe d'ecriture.
+See [docs/CONFIGURATION.md](docs/CONFIGURATION.md) for the settings and
+[docs/CONTENT.md](docs/CONTENT.md) for the writing syntax.
 
 ## Quick Start
 
@@ -114,7 +113,11 @@ Use a square transparent PNG for best results.
         Setup.md
       Guide.md
     assets/               Images (logo.png, screenshots)
-    config.js             Generated — do not edit manually
+    config.js             Generated, do not edit manually
+    themes.js             Theme catalog, generated from themes/
+    themes/               One stylesheet per theme
+    index.json            Static index, built at deployment
+  tools/                  Build, check and serve scripts
   index.html              The engine (auto-updated from source)
   README.md               Becomes the home page
 ```
@@ -140,17 +143,20 @@ Use a square transparent PNG for best results.
 
 ## Local development
 
-Trois facons de travailler en local, au choix.
+On Windows, double click `acidwiki.bat` to browse this repository with its own
+engine, or `check.bat` to run every check first and then start the server.
+
+Otherwise, pick whichever fits:
 
 ```bash
-python -m http.server 8000          # apercu simple, listings du serveur
-node tools/build-index.mjs          # puis apercu hors ligne, mode static
-python tools/serve.py --vault .     # coffre Obsidian, index servi a la volee
+python tools/serve.py --self        # serve this repository, from any directory
+python tools/serve.py --vault .     # serve an Obsidian vault, index built on the fly
+node tools/build-index.mjs          # build a static index, then open index.html offline
+python -m http.server 8000          # plain preview through directory listings
 ```
 
-Le mode `auto` choisit tout seul : index statique s'il existe, sinon detection
-selon le contexte. Les fichiers Markdown de `wiki/docs/` sont trouves
-automatiquement.
+Mode `auto` decides on its own: the static index when it exists, otherwise
+detection from the context. Markdown files are discovered automatically.
 
 `AcidWiki-Feature-Test.md` is a ready-made visual test page for Mermaid, KaTeX, tables, code, the animated theme, and long tables of contents.
 
@@ -168,14 +174,22 @@ automatiquement.
 
 ---
 
-## Outillage
+## Tooling
 
 ```bash
-node tools/build-index.mjs      # construire l'index statique
-node tools/check-syntax.mjs     # verifier la syntaxe du moteur
-node tools/test-modules.mjs     # banc de test des modules
-python tools/serve.py --vault . # servir un coffre en local
+check.bat                       # every check below, then start the server (Windows)
+node tools/build-index.mjs      # build the static index
+node tools/build-themes.mjs     # regenerate the theme catalog from wiki/themes/
+node tools/check-syntax.mjs     # parse every engine file
+node tools/test-modules.mjs     # module test bench
+node tools/sync-engine.mjs --check              # verify the engine on its own
+node tools/sync-engine.mjs --target <folder>    # update a local deployment
+python tools/serve.py --self    # serve this repository
 ```
+
+`sync-engine.mjs` derives what belongs to the engine from `index.html` itself,
+so a newly added resource is carried over without editing any list. A local
+deployment keeps its own `wiki/config.js`, `wiki/assets` and index files.
 
 ---
 

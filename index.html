@@ -629,7 +629,7 @@
             opacity: 1;
         }
 
-        /* Bottom bar: Menu | Scroll to top (center) | TOC — aligne les 3 boutons à la même hauteur */
+        /* Bottom bar: Menu | Scroll to top (center) | TOC, aligne les 3 boutons à la même hauteur */
         .kb-bottom-bar {
             position: fixed;
             bottom: 0;
@@ -1538,6 +1538,10 @@
             contentPrefix: "",
             // Strategie de decouverte du contenu effectivement retenue.
             mode: "auto",
+            // Vrai quand les pages se lisent sur raw.githubusercontent, faux quand
+            // elles se lisent a cote du moteur. Fixe par la decouverte, et non par la
+            // seule presence d'un depot dans la configuration.
+            remoteContent: false,
             // Index statique (wiki/index.json) une fois charge, sinon null.
             contentIndex: null
         };
@@ -2364,9 +2368,16 @@
 
         // Le contenu est lu sur raw.githubusercontent quand un depot est configure,
         // sinon a cote du moteur. Medias et fichiers annexes suivent la meme regle.
+        // Un depot configure ne suffit pas a decider ou lire : un deploiement local
+        // en declare un pour le changelog et les liens, sans vouloir pour autant
+        // relire ses pages depuis GitHub.
+        function useRemoteContent() {
+            return Boolean(STATE.remoteContent && STATE.repo && STATE.branch);
+        }
+
         function sourceUrl(path) {
             if (!path) return '';
-            return (STATE.repo && STATE.branch)
+            return useRemoteContent()
                 ? `https://raw.githubusercontent.com/${STATE.repo}/${STATE.branch}/${encodeRepoPath(path)}`
                 : `./${encodeRepoPath(path)}`;
         }
@@ -2501,7 +2512,15 @@
                 let discoveryResult = null;
                 for (const discover of discoveryChain(STATE.mode)) {
                     discoveryResult = await discover();
-                    if (discoveryResult) break;
+                    if (discoveryResult) {
+                        // La strategie qui repond decide aussi d'ou se lit le contenu.
+                        // Servi en local, le moteur allait chercher les pages sur
+                        // raw.githubusercontent alors que l'arborescence venait du
+                        // disque : on relisait la version publiee au lieu de la sienne.
+                        STATE.remoteContent = discover === fetchWikiStructureFromAPI;
+                        debugLog(`[AcidWiki] 📡 Content read from ${STATE.remoteContent ? 'the repository' : 'this server'}`);
+                        break;
+                    }
                     debugLog('[AcidWiki] 🔄 Trying alternate content discovery...');
                 }
 
@@ -2867,7 +2886,7 @@
         // un redeploiement pour voir un markdown mis a jour.
         // Retourne '' plutot que de jeter : chaque appelant garde son repli local.
         async function fetchRawMarkdown(repoPath) {
-            if (!repoPath || !STATE.repo || !STATE.branch) return '';
+            if (!repoPath || !useRemoteContent()) return '';
             try {
                 const res = await fetch(`https://raw.githubusercontent.com/${STATE.repo}/${STATE.branch}/${encodeRepoPath(repoPath)}`);
                 if (!res.ok) return '';
@@ -3113,7 +3132,9 @@
             }
             if (!stack.length) return url;
 
-            return `https://raw.githubusercontent.com/${STATE.repo}/${STATE.branch}/${stack.join('/')}`;
+            return useRemoteContent()
+                ? `https://raw.githubusercontent.com/${STATE.repo}/${STATE.branch}/${stack.join('/')}`
+                : `./${stack.join('/')}`;
         }
 
         // Passe obligee avant tout rendu Markdown : traduction Obsidian puis extraction
@@ -3575,7 +3596,7 @@
                     let text = '';
                     try {
                         const isGitHubPages = /\.github\.io$/i.test(window.location.hostname);
-                        if (isRoot && STATE.repo && STATE.branch) {
+                        if (isRoot && useRemoteContent()) {
                             const rawUrl = `https://raw.githubusercontent.com/${STATE.repo}/${STATE.branch}/${encodeRepoPath(item.file)}`;
                             const rawRes = await fetch(rawUrl);
                             if (rawRes.ok) {

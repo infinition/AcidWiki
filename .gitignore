@@ -36,3 +36,4 @@ wiki/docs/*
 # Une version commitee serait servie perimee si la construction echouait.
 wiki/index.json
 wiki/index-links.json
+__pycache__/
