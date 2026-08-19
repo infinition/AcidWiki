@@ -3236,7 +3236,11 @@
             let currentPath = "";
             const folderParts = folder.split('/').filter(s => s);
 
-            if (folder === '' && (STATE.rootMdFiles || []).length > 0) {
+            // Le segment de racine ne s'affiche que si la navigation groupe vraiment
+            // les pages racine sous une rubrique. Sans ce garde-fou, le fil d'Ariane
+            // annoncait une rubrique que la barre laterale ne montre plus, et cliquer
+            // dessus menait a un niveau inexistant.
+            if (folder === '' && CONFIG.features.groupRootFiles && (STATE.rootMdFiles || []).length > 0) {
                 breadcrumbParts.push(`<span class="hover:text-hack-heading cursor-pointer" onclick="loadDefault()">${CONFIG.ui.rootReadmeTitle || 'Project Home'}</span>`);
             }
             segments.forEach((seg, i) => {

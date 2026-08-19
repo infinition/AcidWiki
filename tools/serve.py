@@ -40,9 +40,17 @@ parser.add_argument("--legacy-translate", action="store_true",
 parser.add_argument("--build", metavar="DOSSIER", nargs="?", const=".", default=None,
                     help="Ecrire index.json et index-links.json dans le dossier indique "
                          "(defaut : le coffre) puis quitter, sans demarrer de serveur.")
+parser.add_argument("--self", dest="self_mode", action="store_true",
+                    help="Servir le moteur sur son propre contenu, quel que soit le "
+                         "dossier courant. Utile pour relire la documentation du "
+                         "depot ou verifier une modification du moteur.")
 args, _ = parser.parse_known_args()
 
-if args.vault:
+if args.self_mode:
+    # Ancre sur l'emplacement du moteur et non sur le dossier courant : sans cela,
+    # lancer le serveur depuis ailleurs servait ce dossier-la par accident.
+    VAULT = ENGINE_DIR
+elif args.vault:
     VAULT = os.path.abspath(args.vault)
 else:
     cwd = os.getcwd()
@@ -53,6 +61,10 @@ else:
 
 if args.port:
     PORT = args.port
+elif args.self_mode:
+    # Port dedie : le nom du depot ne correspond a aucun coffre connu et retombait
+    # donc sur celui de ML Academy, empechant de faire tourner les deux ensemble.
+    PORT = int(os.environ.get("ACIDWIKI_SELF_PORT", "8770"))
 else:
     vault_name = os.path.basename(VAULT).lower()
     if "cg" in vault_name:
@@ -609,7 +621,18 @@ class Handler(BaseHTTPRequestHandler):
             return self._send(listing_html(entries), "text/html; charset=utf-8")
 
         if path.startswith("/docs/"):
-            return self._serve_under(VAULT, path[len("/docs/"):], "/docs/", markdown=True)
+            rel = path[len("/docs/"):]
+            # "/docs/" est la route de contenu, et VAULT en est la racine. Un coffre
+            # qui contient un vrai dossier "docs" entrait donc en collision : ses
+            # pages etaient cherchees a la racine et repondaient 404. C'est le cas
+            # du depot AcidWiki lui-meme. On reessaie en gardant le dossier avant
+            # d'abandonner, ce qui ne change rien aux coffres sans dossier "docs".
+            direct = os.path.normpath(os.path.join(VAULT, rel.replace("/", os.sep)))
+            if not os.path.isfile(direct):
+                nested = os.path.normpath(os.path.join(VAULT, "docs", rel.replace("/", os.sep)))
+                if os.path.isfile(nested):
+                    rel = "docs/" + rel
+            return self._serve_under(VAULT, rel, "/docs/", markdown=True)
 
         # 6. Direct Vault content
         rel = path.lstrip("/")
@@ -640,6 +663,12 @@ class Handler(BaseHTTPRequestHandler):
             return self._send_file(candidate)
 
         return self._not_found()
+
+    # Le moteur teste l'existence du logo par une requete HEAD. Sans cette
+    # methode, le serveur repondait 501 et l'erreur apparaissait dans la console
+    # a chaque chargement de page. Les deux fonctions d'envoi savent deja taire
+    # le corps quand la methode est HEAD, il n'y a donc que l'aiguillage a poser.
+    do_HEAD = do_GET
 
     def _serve_under(self, base, rel, url_prefix, markdown):
         rel_fs = rel.replace("/", os.sep)

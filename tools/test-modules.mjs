@@ -103,6 +103,17 @@ check('bloc de code preserve',
     run('```js\nconst x = [[pas un lien]];\n```'), (v) => v.includes('[[pas un lien]]'));
 check('code inline preserve',
     run('Ecrire `[[ceci]]` litteralement.'), (v) => v.includes('`[[ceci]]`'));
+// Un diagramme Mermaid indente : le corps du bloc etait mis de cote avant le bloc
+// lui-meme, et son marqueur restait affiche a la place du diagramme.
+check('bloc mermaid indente rendu entier',
+    run('```mermaid\ngraph TD\n    A[Debut] --> B[Fin]\n```'),
+    (v) => v.includes('A[Debut] --> B[Fin]') && !v.includes('ACIDWIKI_CODE'));
+check('aucun marqueur ne fuit dans le rendu',
+    run('```mermaid\nsequenceDiagram\n    Bob->>Alice: salut\n```\n\nTexte `inline` et\n\n    bloc indente\n'),
+    (v) => !v.includes('ACIDWIKI_CODE'));
+// Le delimiteur etait un octet nul, que le rendu Markdown est tenu de remplacer.
+check('aucun octet nul dans la sortie',
+    run('```js\nconst x = 1;\n```'), (v) => !v.includes('\0'));
 check('bloc math compacte',
     run('$$\na = b\n\n+ c\n$$'), (v) => v.includes('$$a = b\n+ c$$'));
 check('image relative reroutee',
