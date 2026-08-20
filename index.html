@@ -3864,6 +3864,11 @@
             setTimeout(updateTOCActiveState, 100);
         }
 
+        // Retrait du trait actif par rapport au bord gauche des liens, et abscisse
+        // minimale : la moitie de stroke-width, pour que le trait ne deborde jamais.
+        const TOC_PATH_GAP = 9;
+        const TOC_PATH_MIN_X = 1;
+
         function updateTOCActiveState() {
             const scrollContainer = document.getElementById('scroll-container');
             const headings = Array.from(document.querySelectorAll('#markdown-viewer h1, #markdown-viewer h2, #markdown-viewer h3'));
@@ -3913,15 +3918,15 @@
                 let d = "";
                 let lastIndex = -2;
 
-                activeLinks.forEach((link, index) => {
-                    const id = link.getAttribute('href').substring(1);
-                    const heading = document.getElementById(id);
+                activeLinks.forEach(link => {
                     const linkIndex = tocLinks.indexOf(link);
 
-                    // X position based on indentation (relative to TOC container left border)
-                    let x = -1; // Default for H1 (aligned with the left border)
-                    if (heading.tagName === 'H2') x = 11;   // H2 indented with ml-3 (12px)
-                    else if (heading.tagName === 'H3') x = 23; // H3 indented with ml-6 (24px)
+                    // X lu sur l'indentation reelle du lien : offsetLeft est mesure depuis
+                    // le conteneur .relative, c'est-a-dire l'origine du SVG. Le retrait est
+                    // borne pour que le trait reste dans la colonne : avec l'ancien x = -1,
+                    // le segment des titres de premier niveau tombait a gauche du conteneur
+                    // et n'etait plus visible.
+                    const x = Math.max(TOC_PATH_MIN_X, link.offsetLeft - TOC_PATH_GAP);
 
                     const yTop = link.offsetTop;
                     const yBottom = yTop + link.offsetHeight;
