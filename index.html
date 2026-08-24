@@ -3225,10 +3225,13 @@
         // domain, where only index.html and wiki/ exist. A relative image path such as
         // "dow.png" would resolve against the wiki and 404, so rewrite it to point at
         // the source repository instead. Resolution is relative to the document itself.
-        function resolveRepoAsset(url, docPath) {
-            if (!url || typeof url !== 'string') return url;
-            if (/^(https?:|data:|mailto:|blob:|#|\/\/)/i.test(url)) return url;
-            if (!STATE.repo || !STATE.branch) return url;
+
+        // Chemin normalise, relatif a la racine du depot, ou '' quand l'URL est
+        // absolue ou inexploitable. Isole du reste pour que l'appelant puisse batir
+        // les deux formes du meme fichier, locale et distante.
+        function repoAssetPath(url, docPath) {
+            if (!url || typeof url !== 'string') return '';
+            if (/^(https?:|data:|mailto:|blob:|#|\/\/)/i.test(url)) return '';
 
             let clean = url.replace(/\\/g, '/').replace(/^\.\//, '');
             let base = '';
@@ -3244,11 +3247,26 @@
                 if (part === '..') stack.pop();
                 else if (part && part !== '.') stack.push(part);
             }
-            if (!stack.length) return url;
+            return stack.join('/');
+        }
+
+        function resolveRepoAsset(url, docPath) {
+            if (!STATE.repo || !STATE.branch) return url;
+            const path = repoAssetPath(url, docPath);
+            if (!path) return url;
 
             return useRemoteContent()
-                ? `https://raw.githubusercontent.com/${STATE.repo}/${STATE.branch}/${stack.join('/')}`
-                : `./${stack.join('/')}`;
+                ? `https://raw.githubusercontent.com/${STATE.repo}/${STATE.branch}/${path}`
+                : `./${path}`;
+        }
+
+        // Le meme fichier, vu depuis le depot. Sert de second essai quand la copie
+        // locale n'existe pas : le site Pages n'assemble que index.html et wiki/,
+        // donc une image rangee dans assets/ ou docs/ du depot n'y figure pas.
+        function remoteRepoAsset(url, docPath) {
+            if (!STATE.repo || !STATE.branch) return '';
+            const path = repoAssetPath(url, docPath);
+            return path ? `https://raw.githubusercontent.com/${STATE.repo}/${STATE.branch}/${path}` : '';
         }
 
         // Passe obligee avant tout rendu Markdown : traduction Obsidian puis extraction
@@ -3497,8 +3515,23 @@
                 // centering, and which the markdown renderer never sees.
                 viewer.querySelectorAll('img[src]').forEach(img => {
                     const original = img.getAttribute('src');
-                    const resolved = resolveRepoAsset(original, getRepoPath(folder, filename, isRoot));
+                    const resolved = resolveRepoAsset(original, sourcePath);
                     if (resolved !== original) img.setAttribute('src', resolved);
+
+                    // Une image lue en local peut manquer du site deploye tout en
+                    // existant dans le depot : Pages n'assemble que index.html et
+                    // wiki/. Un seul repli, garde pour ne pas boucler si le depot
+                    // ne la contient pas davantage.
+                    const remote = remoteRepoAsset(original, sourcePath);
+                    if (!remote || remote === img.getAttribute('src')) return;
+
+                    const fallback = () => {
+                        if (img.dataset.remoteFallback) return;
+                        img.dataset.remoteFallback = '1';
+                        img.src = remote;
+                    };
+                    img.addEventListener('error', fallback);
+                    if (img.complete && img.naturalWidth === 0) fallback();
                 });
 
                 // --- AJOUT : RENDU DES ÉQUATIONS LATEX (KaTeX) ---
