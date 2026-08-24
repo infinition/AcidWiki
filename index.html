@@ -2118,6 +2118,111 @@
             );
         }
 
+        // --- LOGO RANGE HORS DU WIKI ---
+        // Beaucoup de depots gardent leur icone dans "assets/" a la racine, dans
+        // ".github/assets/" ou dans "docs/assets/". Le dossier est liste une seule
+        // fois via l'API GitHub, puis le fichier est choisi sur son nom : logo, icon,
+        // favicon, ou le nom du depot. Une capture d'ecran ne devient jamais un logo.
+        const BRANDING_ASSET_DIRS = ['assets', '.github/assets', 'docs/assets'];
+        const BRANDING_EXT_RANK = { png: 0, svg: 1, webp: 2, jpg: 3, jpeg: 3, gif: 4, ico: 5 };
+        const BRANDING_STEM_RANK = ['logo', 'icon', 'appicon', 'favicon', 'applogo'];
+
+        // Retourne un score, le plus bas gagne, ou null si le fichier n'a rien d'un
+        // logo. Le nom est normalise pour que "app_icon", "app-icon" et "AppIcon"
+        // soient un seul et meme candidat.
+        function scoreLogoCandidate(name, repoName) {
+            const lower = String(name || '').toLowerCase();
+            const dot = lower.lastIndexOf('.');
+            if (dot < 1) return null;
+            const ext = lower.slice(dot + 1);
+            if (!(ext in BRANDING_EXT_RANK)) return null;
+
+            const stem = lower.slice(0, dot).replace(/[\s_.-]+/g, '');
+            const repoStem = String(repoName || '').toLowerCase().replace(/[\s_.-]+/g, '');
+
+            let stemRank = BRANDING_STEM_RANK.indexOf(stem);
+            if (stemRank < 0 && repoStem && stem === repoStem) stemRank = BRANDING_STEM_RANK.length;
+            // Variantes suffixees : logo-dark, icon256, favicon-32.
+            if (stemRank < 0 && BRANDING_STEM_RANK.some(base => stem.startsWith(base))) stemRank = BRANDING_STEM_RANK.length + 1;
+            // Volontairement pas de correspondance partielle sur le nom du depot :
+            // "albedo-overview.png" est une capture d'ecran, pas une icone.
+            if (stemRank < 0) return null;
+
+            // Un .ico ne sert qu'en dernier recours : multi-tailles, il rend mal
+            // dans un <img> a cote d'un PNG du meme dossier.
+            const lastResort = ext === 'ico' ? 1000 : 0;
+            return lastResort + stemRank * 10 + BRANDING_EXT_RANK[ext];
+        }
+
+        // Retourne { url, reliable }. "reliable" tombe a faux des qu'une reponse
+        // n'a pas pu etre lue, quota d'API atteint ou reseau coupe : l'absence de
+        // logo n'est alors qu'une ignorance, et ne merite pas d'etre mise en cache.
+        async function probeAssetDirsForLogo() {
+            const repoName = (STATE.repo || '').split('/').pop();
+            let reliable = true;
+
+            if (STATE.repo && STATE.branch) {
+                for (const dir of BRANDING_ASSET_DIRS) {
+                    let entries = null;
+                    try {
+                        const res = await fetch(`https://api.github.com/repos/${STATE.repo}/contents/${encodeRepoPath(dir)}?ref=${encodeURIComponent(STATE.branch)}`);
+                        // 404 signe un dossier absent, tout autre echec une panne.
+                        if (!res.ok) {
+                            if (res.status !== 404) reliable = false;
+                            continue;
+                        }
+                        entries = await res.json();
+                    } catch (_) { reliable = false; continue; }
+                    if (!Array.isArray(entries)) continue;
+
+                    let best = null;
+                    for (const entry of entries) {
+                        if (!entry || entry.type !== 'file') continue;
+                        const score = scoreLogoCandidate(entry.name, repoName);
+                        if (score === null) continue;
+                        if (!best || score < best.score) best = { score, name: entry.name };
+                    }
+                    if (best) {
+                        return { url: `https://raw.githubusercontent.com/${STATE.repo}/${STATE.branch}/${encodeRepoPath(`${dir}/${best.name}`)}`, reliable: true };
+                    }
+                }
+                return { url: null, reliable };
+            }
+
+            // Sans depot configure, aucune liste n'est disponible : seuls les noms
+            // les plus courants peuvent etre testes, et a la racine uniquement.
+            for (const name of ['assets/logo.png', 'assets/logo.svg', 'assets/icon.png']) {
+                try {
+                    const res = await fetch(`./${name}`, { method: 'HEAD' });
+                    if (res.ok) return { url: name, reliable: true };
+                } catch (_) { reliable = false; }
+            }
+            return { url: null, reliable };
+        }
+
+        // La reponse est mise en cache une journee, quota d'API oblige, y compris
+        // l'absence de logo pour ne pas relancer la recherche a chaque page.
+        async function findAssetDirLogo() {
+            const CACHE_KEY = `acidwiki_asset_logo:${STATE.repo || 'local'}@${STATE.branch || ''}`;
+            const ONE_DAY = 24 * 3600 * 1000;
+
+            try {
+                const cached = localStorage.getItem(CACHE_KEY);
+                if (cached) {
+                    const { timestamp, url } = JSON.parse(cached);
+                    if (Date.now() - timestamp < ONE_DAY) return url || null;
+                }
+            } catch (_) {}
+
+            const found = await probeAssetDirsForLogo();
+            if (found.url || found.reliable) {
+                try {
+                    localStorage.setItem(CACHE_KEY, JSON.stringify({ timestamp: Date.now(), url: found.url }));
+                } catch (_) {}
+            }
+            return found.url;
+        }
+
         async function updateSiteBranding() {
             try {
                 // 1. Priorité : wiki/assets/logo.png
@@ -2131,7 +2236,16 @@
                     }
                 } catch (_) {}
 
-                // 2. Deuxième priorité : première véritable image du README.md (ignorant les badges)
+                // 2. Icone rangee dans un dossier d'assets du depot, convention
+                // courante en dehors d'AcidWiki.
+                const assetDirLogo = await findAssetDirLogo();
+                if (assetDirLogo) {
+                    debugLog('[AcidWiki] 🖼️ Using logo from repository assets:', assetDirLogo);
+                    applyBranding(assetDirLogo);
+                    return;
+                }
+
+                // 3. Troisième priorité : première véritable image du README.md (ignorant les badges)
                 const filename = 'README.md';
                 let text = '';
                 
@@ -2197,7 +2311,7 @@
                     }
                 }
                 
-                // 3. Fallback : déjà géré par applyConfig() lors de l'initialisation
+                // 4. Fallback : déjà géré par applyConfig() lors de l'initialisation
             } catch (e) {
                 debugLog('[AcidWiki] ⚠️ Branding update failed:', e);
             }

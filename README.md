@@ -93,8 +93,13 @@ Project name, version, GitHub URL, and footer copyright are detected automatical
 Priority order for logo and favicon:
 
 1. `wiki/assets/logo.png` if it exists.
-2. First image found in `README.md`.
-3. Default AcidWiki logo.
+2. A logo found in the repository asset folders: `assets/`, `.github/assets/`,
+   `docs/assets/`. A file is only picked when its name says so: `logo.*`,
+   `icon.*`, `app_icon.*`, `favicon.*`, a suffixed variant such as
+   `icon-256.png`, or the repository name itself (`myrepo.png`). Screenshots are
+   left alone. PNG wins over SVG, then WEBP, JPG, GIF, and finally ICO.
+3. First image found in `README.md`.
+4. Default AcidWiki logo.
 
 Use a square transparent PNG for best results.
 

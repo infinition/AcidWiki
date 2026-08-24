@@ -125,9 +125,10 @@ const CONFIG = {
 
     // Logo Settings
     // Chaine de resolution du logo, dans l'ordre : wiki/assets/logo.png fourni par
-    // le repo, puis la premiere image de son README, puis ce placeholder. Le workflow
-    // renomme le logo AcidWiki en logo-fallback.png quand le repo n'en fournit pas,
-    // pour que l'etape README soit reellement atteinte.
+    // le repo, puis une icone nommee dans assets/, .github/assets/ ou docs/assets/,
+    // puis la premiere image de son README, puis ce placeholder. Le workflow renomme
+    // le logo AcidWiki en logo-fallback.png quand le repo n'en fournit pas, pour que
+    // les etapes suivantes soient reellement atteintes.
     logoPath: "wiki/assets/logo.png",
     logoPlaceholder: "wiki/assets/logo-fallback.png",
 
