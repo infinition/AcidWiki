@@ -4062,12 +4062,18 @@
             const containerRect = scrollContainer.getBoundingClientRect();
             const buffer = 10; // Very small buffer for precision
 
+            // Le fil d'Ariane colle en haut et masque une bande de la page. Sans
+            // cette retenue, un titre deja passe dessous restait compte comme lu, et
+            // la TOC avait un titre de retard sur ce que l'oeil voit.
+            const stickyBar = document.getElementById('breadcrumb-sticky-container');
+            const topInset = stickyBar ? stickyBar.getBoundingClientRect().height : 0;
+
             // Find headings that are visible in the viewport
             let activeHeadings = headings.filter(h => {
                 const rect = h.getBoundingClientRect();
                 const relativeTop = rect.top - containerRect.top;
                 const relativeBottom = rect.bottom - containerRect.top;
-                return (relativeTop < containerRect.height - buffer) && (relativeBottom > buffer);
+                return (relativeTop < containerRect.height - buffer) && (relativeBottom > topInset + buffer);
             });
 
             // Fallback: if no heading is in view, use the last one that passed the top
@@ -4127,32 +4133,48 @@
                 path.classList.remove('active');
             }
 
-            followActiveTocLink(activeLinks[0]);
+            followActiveTocLinks(activeLinks);
         }
 
-        // La TOC suit la lecture. Une zone de confort evite l'animation permanente :
-        // tant que l'entree active y reste, rien ne bouge ; quand elle en sort, la
-        // colonne la replace au tiers superieur plutot que de la coller au bord, ou
-        // elle serait a moitie lisible et ressortirait au titre suivant.
-        const TOC_COMFORT_RATIO = 0.2;
-        const TOC_COMFORT_MAX = 140;
+        // La TOC suit la lecture. Le repere est le bloc actif entier, pas sa seule
+        // premiere entree : un titre qui entre en bas de la page ajoute une entree en
+        // bas du bloc, et c'est precisement ce debordement qu'il faut rattraper. Une
+        // zone de confort evite l'animation permanente : tant que le bloc y tient, la
+        // colonne ne bouge pas.
+        const TOC_COMFORT_RATIO = 0.15;
+        const TOC_COMFORT_MAX = 110;
 
-        function followActiveTocLink(link) {
-            const box = link && link.closest('.toc-scroll');
+        function followActiveTocLinks(links) {
+            if (!links || !links.length) return;
+
+            const box = links[0].closest('.toc-scroll');
             if (!box || box.scrollHeight <= box.clientHeight) return;
 
             // offsetTop est mesure depuis le conteneur, qui est aussi l'offsetParent.
-            const top = link.offsetTop;
-            const bottom = top + link.offsetHeight;
-            const margin = Math.min(TOC_COMFORT_MAX, box.clientHeight * TOC_COMFORT_RATIO);
+            const last = links[links.length - 1];
+            const top = links[0].offsetTop;
+            const bottom = last.offsetTop + last.offsetHeight;
 
-            const inComfortZone = top >= box.scrollTop + margin
-                && bottom <= box.scrollTop + box.clientHeight - margin;
-            if (inComfortZone) return;
+            const view = box.clientHeight;
+            const margin = Math.min(TOC_COMFORT_MAX, view * TOC_COMFORT_RATIO);
+            if (top >= box.scrollTop + margin && bottom <= box.scrollTop + view - margin) return;
 
-            const target = top - box.clientHeight / 3;
-            const maxScroll = box.scrollHeight - box.clientHeight;
-            box.scrollTo({ top: Math.max(0, Math.min(target, maxScroll)), behavior: 'smooth' });
+            // Bloc plus haut que la colonne : son debut se cale au tiers superieur,
+            // la suite deborde de toute facon. Sinon le bloc se centre.
+            const target = (bottom - top > view - 2 * margin)
+                ? top - view / 3
+                : top - (view - (bottom - top)) / 2;
+
+            // Un bloc entierement hors cadre vient d'un saut, pas d'une lecture :
+            // l'animation n'y apporte rien et se ferait rattraper par le defilement
+            // suivant. Elle est reservee aux corrections courtes.
+            const outOfFrame = bottom <= box.scrollTop || top >= box.scrollTop + view;
+            const maxScroll = box.scrollHeight - view;
+
+            box.scrollTo({
+                top: Math.max(0, Math.min(target, maxScroll)),
+                behavior: outOfFrame ? 'auto' : 'smooth'
+            });
         }
 
         // --- 6. SIDEBAR ---
