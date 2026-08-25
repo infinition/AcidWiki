@@ -614,20 +614,19 @@
            cours de lecture restait hors de vue. Le SVG du trait actif est en
            position absolue dans ce meme conteneur, il defile donc avec les liens
            et reste aligne sur eux. */
+        /* Barre de defilement masquee : la colonne se replace toute seule sur
+           l'entree lue, et une barre claire, etrangere au theme, coupait la
+           colonne en deux pour rien. La molette defile toujours. */
         .toc-scroll {
             max-height: calc(100vh - 9rem);
             overflow-y: auto;
             overscroll-behavior: contain;
-            scrollbar-width: thin;
-            padding-right: 0.375rem;
+            -ms-overflow-style: none;
+            scrollbar-width: none;
         }
 
         .toc-scroll::-webkit-scrollbar {
-            width: 6px;
-        }
-
-        .toc-scroll::-webkit-scrollbar-track {
-            background: transparent;
+            display: none;
         }
 
         #toc-svg {
