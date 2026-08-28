@@ -103,13 +103,9 @@ jobs:
             cp -a docs/* _site/docs/ || true
           fi
 
-          # 4. Le logo du moteur ne doit pas usurper l'identite du repo appelant.
-          # Sans ca, wiki/assets/logo.png existe toujours et l'auto-detection du
-          # logo depuis le README n'est jamais atteinte. On le degrade en dernier
-          # recours, sauf si le repo appelant fournit reellement son propre logo.
-          if [ ! -f "wiki/assets/logo.png" ] && [ -f "_site/wiki/assets/logo.png" ]; then
-            echo "🎨 Aucun logo local : le logo AcidWiki devient le fallback final."
-            mv _site/wiki/assets/logo.png _site/wiki/assets/logo-fallback.png
+          # 4. Sauvegarde du logo AcidWiki en repli
+          if [ -f "_site/wiki/assets/logo.png" ]; then
+            cp -fv _site/wiki/assets/logo.png _site/wiki/assets/logo-fallback.png || true
           fi
 
       - name: Setup Node
@@ -134,28 +130,13 @@ jobs:
             *message*|*'{'*|null) LATEST_TAG="" ;;
           esac
 
-          # Le gabarit est evalue puis reserialise. Les anciens sed operaient sur du
-          # JavaScript : une barre verticale ou un guillemet dans une URL de config
-          # produisait un fichier inanalysable, et le wiki se deployait vide.
+          # Evaluation de la configuration, resolution statique du logo et injection
+          # dans index.html, wiki/config.js et wiki/manifest.pwa.json.
           node temp_engine/tools/apply-config.mjs \
             --config .github/acidwiki.json \
             --target _site/wiki/config.js \
             --repo "$REPO_FULL" \
             --version "$LATEST_TAG"
-
-          # Manifeste PWA : nom du depot et icone reellement presente sur le site.
-          MANIFEST_FILE="_site/wiki/manifest.pwa.json"
-          REPO_NAME=$(echo "$REPO_FULL" | awk -F '/' '{print $2}')
-          if [ -f "$MANIFEST_FILE" ]; then
-            jq --arg name "$(echo "$REPO_NAME" | tr '[:lower:]' '[:upper:]') WIKI" \
-               --arg short "$REPO_NAME" \
-               --arg icon "assets/logo.png" '
-              .name = $name |
-              .short_name = $short |
-              if .icons then (.icons[].src = $icon) else . end |
-              if .shortcuts then (.shortcuts[].icons[].src = $icon) else . end
-            ' "$MANIFEST_FILE" > manifest.tmp && mv manifest.tmp "$MANIFEST_FILE"
-          fi
 
       - name: Build static content index
         run: |

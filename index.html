@@ -2245,16 +2245,18 @@
 
         async function updateSiteBranding() {
             try {
-                // 1. Priorité : wiki/assets/logo.png
-                const localLogoPath = 'wiki/assets/logo.png';
-                try {
-                    const localLogoRes = await fetch(`./${localLogoPath}`, { method: 'HEAD' });
-                    if (localLogoRes.ok) {
-                        debugLog('[AcidWiki] 🖼️ Using logo from wiki/assets/logo.png');
-                        applyBranding(localLogoPath);
-                        return;
-                    }
-                } catch (_) {}
+                // 1. Priorite : logo resolu au build ou wiki/assets/logo.png
+                const localLogoPath = CONFIG.logoPath || 'wiki/assets/logo.png';
+                if (localLogoPath && !localLogoPath.includes('logo-fallback')) {
+                    try {
+                        const localLogoRes = await fetch(`./${localLogoPath}`, { method: 'HEAD' });
+                        if (localLogoRes.ok) {
+                            debugLog('[AcidWiki] 🖼️ Using logo from:', localLogoPath);
+                            applyBranding(localLogoPath);
+                            return;
+                        }
+                    } catch (_) {}
+                }
 
                 // 2. Icone rangee dans un dossier d'assets du depot, convention
                 // courante en dehors d'AcidWiki.
